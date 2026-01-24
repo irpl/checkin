@@ -1,0 +1,32 @@
+ive had an idea for an app that can be used to allow someone to "check-in".
+
+the context would be like, you're in a store that has an order for you to pick up. you walk up to a kiosk and you punch in your customer number. the store then knows that you're present in the store and they bring your stuff out for you.
+
+another example, you're in a restaurant and you have to wait for a server to come take your order.
+
+or you're sat in a school class and the teacher has to say your name and listen for a response to know that you're present.
+
+in each case, someone has to interact with someone or something to let the user know that they're present. my idea involves having some bluetooth beacon in the location, the user that needs to check-in has an app on their phone that listens for that beacon. when the app detects the beacon, it prompts the user, asking them if they are infact in this place and would like to check-in. when they say yes, depening on the context, the app will then present the user with a call to action or a form that makes sense for the context.
+
+the admin would be the one to design the from tht the user fills out upon check-in. like if its a bank, the admin would ideal have the user fill out a form that asks what the purpose of the visit is, eg. loan, depoist, etc. if its a restaurant, the admin would upload the menu with prices and have the client order. a classroom context would just need the client to confirm presence after like an hour of contiuous presence or maybe not contiuous but like maybe most of an hour, like 80% or maybe have the admin specify what percentage of presence time would count as "present". once the client is marked as present, the app would then present the user with the form/call to action that counts them as checked-in.
+
+tell me your thoughts. i think the admin app can be a webapp and the client app be a mobile app.
+
+the app should:
+  - allow an admin to create a form or configure a call to action for the check-in user to interact with after check-in.
+
+  - allow the admin user to specify how long the client device needs to be within close proximity to the beacon before it alerts the client to check-in.
+
+  - allow the admin user to specify whether the client even needs to perform some call to action or if they should just automatically be counted as checked-in. (this one could be problematic. leave this one for now. give me your thoughts.)
+
+  - allow the admin user to see the result of a check-in. that is simply if they are present or the content of the client's filled out form.
+
+  - allow the admin to specify the beacon that the client device should listen for. i imagine that this can be agnostic. the beacon can be an airtag, a phone with a ble beacon app, or some ble compliant beacon device. is this right? can this work?
+
+  - the client to subscribe to some predefined context/campaign. whether it be a bank, store, classroom, etc. 
+
+what else would this need?
+
+what stack would be good for this?
+
+android and ios compatibility, ideally.
