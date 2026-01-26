@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../../../services/supabase_service.dart';
 import '../../../services/ble_service.dart';
+import '../../../services/notification_service.dart';
 import '../../../models/campaign.dart';
 import '../../../models/beacon.dart';
 
@@ -25,8 +26,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _initializeNotifications();
     _loadData();
     _requestPermissions();
+  }
+
+  Future<void> _initializeNotifications() async {
+    final notificationService = ref.read(notificationServiceProvider);
+    await notificationService.initialize(
+      onTap: (payload) {
+        if (payload != null && mounted) {
+          context.go('/checkin/$payload');
+        }
+      },
+    );
   }
 
   Future<void> _requestPermissions() async {
@@ -35,6 +48,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       Permission.bluetoothScan,
       Permission.bluetoothConnect,
       Permission.location,
+      Permission.notification,
     ].request();
   }
 
@@ -72,7 +86,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     try {
       setState(() => _isScanning = true);
-      debugPrint('@@@data: ${_beacons[0].beaconUuid}');
       await bleService.startScanning(_beacons);
 
       bleService.detectedBeacons.listen((detected) {
@@ -91,7 +104,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _handleDetectedBeacon(DetectedBeacon detected) {
     // Find matching beacon based on type
     Beacon? matchingBeacon;
-    debugPrint('@@@@@@ heres one - ${detected.uuid}');
     if (detected.beaconType == BeaconType.eddystone) {
       matchingBeacon = _beacons.cast<Beacon?>().firstWhere(
             (b) =>
@@ -128,6 +140,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     if (campaign == null) return;
 
+    // Check if check-in is allowed at current time
+    if (!campaign.isCheckinAllowedNow()) {
+      return; // Outside allowed time window
+    }
+
     // Check if we already detected this campaign recently
     final lastDetected = _detectedCampaigns[campaign.id];
     if (lastDetected != null &&
@@ -144,50 +161,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     if (delay > 0) {
       Future.delayed(Duration(seconds: delay), () {
         if (mounted) {
-          _showCheckinPrompt(campaign, beacon);
+          _showCheckinNotification(campaign, beacon);
         }
       });
     } else {
-      _showCheckinPrompt(campaign, beacon);
+      _showCheckinNotification(campaign, beacon);
     }
   }
 
-  void _showCheckinPrompt(Campaign campaign, Beacon beacon) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Check In?'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('You are near: ${campaign.name}'),
-            if (beacon.locationDescription != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  beacon.locationDescription!,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            const SizedBox(height: 16),
-            const Text('Would you like to check in?'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Not Now'),
-          ),
-          FilledButton(
-            onPressed: () {
-              Navigator.pop(context);
-              context.go('/checkin/${campaign.id}');
-            },
-            child: const Text('Check In'),
-          ),
-        ],
-      ),
+  void _showCheckinNotification(Campaign campaign, Beacon beacon) {
+    final notificationService = ref.read(notificationServiceProvider);
+    notificationService.showCheckinNotification(
+      campaignName: campaign.name,
+      campaignId: campaign.id,
+      locationDescription: beacon.locationDescription,
     );
   }
 

@@ -28,6 +28,9 @@ dependencies:
   shared_preferences: ^2.2.2
   intl: ^0.18.1
 
+  # Notifications
+  flutter_local_notifications: ^17.0.0
+
   # UI
   cupertino_icons: ^1.0.6
 
