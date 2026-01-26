@@ -13,6 +13,9 @@ const campaignSchema = z.object({
   required_duration_minutes: z.number().min(0).default(0),
   required_presence_percentage: z.number().min(1).max(100).default(100),
   proximity_delay_seconds: z.number().min(0).default(0),
+  time_restriction_enabled: z.boolean().default(false),
+  allowed_start_time: z.string().optional(),
+  allowed_end_time: z.string().optional(),
   is_active: z.boolean().default(true),
 })
 
@@ -34,17 +37,27 @@ export default function CreateCampaignPage() {
       required_duration_minutes: 0,
       required_presence_percentage: 100,
       proximity_delay_seconds: 0,
+      time_restriction_enabled: false,
+      allowed_start_time: '',
+      allowed_end_time: '',
       is_active: true,
     },
   })
 
   const campaignType = watch('campaign_type')
+  const timeRestrictionEnabled = watch('time_restriction_enabled')
 
   const onSubmit = async (data: CampaignForm) => {
     try {
       setError(null)
       const { error } = await supabase.from('campaigns').insert({
         ...data,
+        allowed_start_time: data.time_restriction_enabled && data.allowed_start_time
+          ? data.allowed_start_time
+          : null,
+        allowed_end_time: data.time_restriction_enabled && data.allowed_end_time
+          ? data.allowed_end_time
+          : null,
         organization_id: (await supabase.rpc('get_admin_org_id')).data,
       })
       if (error) throw error
@@ -163,6 +176,48 @@ export default function CreateCampaignPage() {
           <p className="text-sm text-gray-500 mt-1">
             How long should the user be near the beacon before prompting check-in?
           </p>
+        </div>
+
+        <div className="border-t pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <input
+              type="checkbox"
+              {...register('time_restriction_enabled')}
+              id="time_restriction_enabled"
+              className="rounded border-gray-300"
+            />
+            <label htmlFor="time_restriction_enabled" className="text-sm font-medium text-gray-700">
+              Restrict check-in to specific times
+            </label>
+          </div>
+
+          {timeRestrictionEnabled && (
+            <div className="grid grid-cols-2 gap-4 ml-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Start Time *
+                </label>
+                <input
+                  type="time"
+                  {...register('allowed_start_time')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  End Time *
+                </label>
+                <input
+                  type="time"
+                  {...register('allowed_end_time')}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <p className="col-span-2 text-sm text-gray-500">
+                Users can only check in between these times (local time).
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">

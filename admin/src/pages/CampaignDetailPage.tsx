@@ -106,6 +106,14 @@ export default function CampaignDetailPage() {
             <p className="font-medium">{campaign.proximity_delay_seconds}s</p>
           </div>
           <div>
+            <p className="text-sm text-gray-500">Time Restriction</p>
+            <p className="font-medium">
+              {campaign.time_restriction_enabled && campaign.allowed_start_time && campaign.allowed_end_time
+                ? `${campaign.allowed_start_time.slice(0, 5)} - ${campaign.allowed_end_time.slice(0, 5)}`
+                : 'None'}
+            </p>
+          </div>
+          <div>
             <p className="text-sm text-gray-500">Created</p>
             <p className="font-medium">
               {format(new Date(campaign.created_at), 'MMM d, yyyy')}

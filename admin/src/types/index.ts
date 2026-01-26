@@ -14,6 +14,10 @@ export interface Campaign {
   required_duration_minutes: number
   required_presence_percentage: number
   proximity_delay_seconds: number
+  // Time restrictions
+  time_restriction_enabled: boolean
+  allowed_start_time: string | null  // TIME format: "HH:MM:SS"
+  allowed_end_time: string | null    // TIME format: "HH:MM:SS"
   is_active: boolean
   created_at: string
   updated_at: string
