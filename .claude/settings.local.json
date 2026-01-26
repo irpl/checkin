@@ -3,7 +3,8 @@
     "allow": [
       "Bash(del \"c:\\\\Users\\\\philo\\\\Desktop\\\\checkin\\\\supabase\\\\migrations\\\\004_register_admin_function.sql\")",
       "Bash(ren:*)",
-      "Bash(flutter create:*)"
+      "Bash(flutter create:*)",
+      "Bash(flutter pub get:*)"
     ]
   }
 }

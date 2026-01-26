@@ -81,51 +81,35 @@ class BleService {
         .where((b) => b.beaconType == BeaconType.eddystone)
         .toList();
 
-    print('BLE: Starting scan for ${beaconsToFind.length} beacons');
-    print('BLE:   iBeacons: ${ibeacons.map((b) => b.beaconUuid).toList()}');
-    print(
+    debugPrint('BLE: Starting scan for ${beaconsToFind.length} beacons');
+    debugPrint('BLE:   iBeacons: ${ibeacons.map((b) => b.beaconUuid).toList()}');
+    debugPrint(
         'BLE:   Eddystone: ${eddystones.map((b) => '${b.eddystoneNamespace}:${b.eddystoneInstance}').toList()}');
 
-    // Start scanning
-    _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
-      for (final result in results) {
-        _processScaResult(result);
-      }
-    });
-
-    // Start continuous scanning with periodic restarts
-    _startContinuousScan();
-  }
-
-  void _processScaResult(ScanResult result) {
-    // Try to parse as beacon and check if it matches our targets
-    final beacon = _parseBeaconFromScanResult(result);
-    if (beacon != null) {
-      if (beacon.beaconType == BeaconType.eddystone) {
-        print(
-            'BLE: ✓ Detected target Eddystone: namespace=${beacon.eddystoneNamespace} instance=${beacon.eddystoneInstance}');
-      } else {
-        print(
-            'BLE: ✓ Detected target iBeacon: UUID=${beacon.uuid} major=${beacon.major} minor=${beacon.minor}');
-      }
-      _detectedBeaconsController.add(beacon);
-    }
-  }
-
-  void _startContinuousScan() async {
-    // Start scan
-    debugPrint("Does this go forever?");
+    // Start scanning - single call with long timeout
     await FlutterBluePlus.startScan(
-      timeout: const Duration(seconds: 10),
-      androidUsesFineLocation: true,
+      timeout: const Duration(hours: 1),
+      androidScanMode: AndroidScanMode.lowLatency,
     );
 
-    // Restart scan after timeout to keep it going
-    _scanTimer = Timer(const Duration(seconds: 11), () {
-      if (_isScanning) {
-        _startContinuousScan();
+    // Listen to scan results
+    _scanSubscription = FlutterBluePlus.scanResults.listen(
+      (results) {
+        _handleScanResults(results);
+      },
+      onError: (error) {
+        debugPrint('BLE: Scan error: $error');
+      },
+    );
+  }
+
+  void _handleScanResults(List<ScanResult> results) {
+    for (final result in results) {
+      final beacon = _parseBeaconFromScanResult(result);
+      if (beacon != null) {
+        _detectedBeaconsController.add(beacon);
       }
-    });
+    }
   }
 
   /// Parse beacon data from scan result (supports iBeacon, AltBeacon, and Eddystone)
@@ -189,144 +173,39 @@ class BleService {
     return null;
   }
 
-  /// Try to parse iBeacon or AltBeacon from manufacturer data
+  /// Try to parse iBeacon from manufacturer data (Apple's company ID 0x004C)
   DetectedBeacon? _tryParseIBeacon(ScanResult result) {
     final manufacturerData = result.advertisementData.manufacturerData;
 
-    // Get target iBeacon UUIDs for logging
-    final targetUuids = _targetBeacons
-        .where(
-            (b) => b.beaconType == BeaconType.ibeacon && b.beaconUuid != null)
-        .map((b) => b.beaconUuid!.toLowerCase().replaceAll('-', ''))
-        .toSet();
-
-    // Log all manufacturer data for debugging
-    // for (final entry in manufacturerData.entries) {
-    //   final manufacturerId = entry.key;
-    //   final data = entry.value;
-    //   debugPrint(
-    //       'BLE: Manufacturer 0x${manufacturerId.toRadixString(16)}: ${data.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
-    // }
-
-    // Try iBeacon format first (Apple's company ID 0x004C)
+    // iBeacon uses Apple's company ID: 0x004C
     final appleData = manufacturerData[0x004C];
-    if (appleData != null && appleData.length >= 23) {
-      debugPrint('Apple stuff');
-      debugPrint(
-          '${appleData.map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ')}');
-      if (appleData[0] == 0x02 && appleData[1] == 0x15) {
-        final uuidBytes = appleData.sublist(2, 18);
-        final uuid = _bytesToUuid(uuidBytes);
-        final major = (appleData[18] << 8) | appleData[19];
-        final minor = (appleData[20] << 8) | appleData[21];
-
-        debugPrint(
-            'BLE: Found Apple iBeacon - UUID=$uuid major=$major minor=$minor');
-
-        for (final target in _targetBeacons) {
-          if (target.matchesIBeacon(uuid, major, minor)) {
-            return DetectedBeacon.iBeacon(
-              uuid: uuid,
-              major: major,
-              minor: minor,
-              rssi: result.rssi,
-              detectedAt: DateTime.now(),
-            );
-          }
-        }
-      }
+    if (appleData == null || appleData.length < 23) {
+      return null;
     }
 
-    // Try AltBeacon format (Radius Networks company ID 0x0118)
-    final altBeaconData = manufacturerData[0x0118];
-    if (altBeaconData != null && altBeaconData.length >= 24) {
-      if (altBeaconData[0] == 0xBE && altBeaconData[1] == 0xAC) {
-        final uuidBytes = altBeaconData.sublist(2, 18);
-        final uuid = _bytesToUuid(uuidBytes);
-        final major = (altBeaconData[18] << 8) | altBeaconData[19];
-        final minor = (altBeaconData[20] << 8) | altBeaconData[21];
-
-        debugPrint(
-            'BLE: Found AltBeacon - UUID=$uuid major=$major minor=$minor');
-
-        for (final target in _targetBeacons) {
-          if (target.matchesIBeacon(uuid, major, minor)) {
-            return DetectedBeacon.iBeacon(
-              uuid: uuid,
-              major: major,
-              minor: minor,
-              rssi: result.rssi,
-              detectedAt: DateTime.now(),
-            );
-          }
-        }
-      }
+    // Check iBeacon prefix: 0x02 0x15
+    if (appleData[0] != 0x02 || appleData[1] != 0x15) {
+      return null;
     }
 
-    // Try ANY manufacturer ID with iBeacon format (0x02 0x15 prefix)
-    for (final entry in manufacturerData.entries) {
-      final manufacturerId = entry.key;
-      final data = entry.value;
+    // Parse UUID (bytes 2-17)
+    final uuidBytes = appleData.sublist(2, 18);
+    final uuid = _bytesToUuid(uuidBytes);
 
-      // Skip Apple and AltBeacon as we already checked them
-      if (manufacturerId == 0x004C || manufacturerId == 0x0118) continue;
+    // Parse Major (bytes 18-19) and Minor (bytes 20-21)
+    final major = (appleData[18] << 8) | appleData[19];
+    final minor = (appleData[20] << 8) | appleData[21];
 
-      if (data.length >= 23 && data[0] == 0x02 && data[1] == 0x15) {
-        final uuidBytes = data.sublist(2, 18);
-        final uuid = _bytesToUuid(uuidBytes);
-        final major = (data[18] << 8) | data[19];
-        final minor = (data[20] << 8) | data[21];
-
-        debugPrint(
-            'BLE: Found iBeacon (manufacturer 0x${manufacturerId.toRadixString(16)}) - UUID=$uuid major=$major minor=$minor');
-
-        for (final target in _targetBeacons) {
-          if (target.matchesIBeacon(uuid, major, minor)) {
-            return DetectedBeacon.iBeacon(
-              uuid: uuid,
-              major: major,
-              minor: minor,
-              rssi: result.rssi,
-              detectedAt: DateTime.now(),
-            );
-          }
-        }
-      }
-    }
-
-    // Generic scan: look for UUID pattern in any manufacturer data
-    for (final entry in manufacturerData.entries) {
-      final data = entry.value;
-
-      // Need at least 21 bytes for UUID + major + minor
-      if (data.length >= 21) {
-        // Try to find iBeacon signature anywhere in the data
-        for (int i = 0; i <= data.length - 23; i++) {
-          if (data[i] == 0x02 && data[i + 1] == 0x15) {
-            final uuidBytes = data.sublist(i + 2, i + 18);
-            final uuid = _bytesToUuid(uuidBytes);
-            final major = (data[i + 18] << 8) | data[i + 19];
-            final minor = (data[i + 20] << 8) | data[i + 21];
-
-            final normalizedUuid = uuid.toLowerCase().replaceAll('-', '');
-            if (targetUuids.contains(normalizedUuid)) {
-              debugPrint(
-                  'BLE: Found iBeacon via pattern scan - UUID=$uuid major=$major minor=$minor');
-
-              for (final target in _targetBeacons) {
-                if (target.matchesIBeacon(uuid, major, minor)) {
-                  return DetectedBeacon.iBeacon(
-                    uuid: uuid,
-                    major: major,
-                    minor: minor,
-                    rssi: result.rssi,
-                    detectedAt: DateTime.now(),
-                  );
-                }
-              }
-            }
-          }
-        }
+    // Check if this matches any of our target beacons
+    for (final target in _targetBeacons) {
+      if (target.matchesIBeacon(uuid, major, minor)) {
+        return DetectedBeacon.iBeacon(
+          uuid: uuid,
+          major: major,
+          minor: minor,
+          rssi: result.rssi,
+          detectedAt: DateTime.now(),
+        );
       }
     }
 
