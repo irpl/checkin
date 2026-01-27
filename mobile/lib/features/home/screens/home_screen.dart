@@ -102,35 +102,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _handleDetectedBeacon(DetectedBeacon detected) {
-    // Find matching beacon based on type
-    Beacon? matchingBeacon;
-    if (detected.beaconType == BeaconType.eddystone) {
-      matchingBeacon = _beacons.cast<Beacon?>().firstWhere(
-            (b) =>
-                b != null &&
-                b.matchesEddystone(
-                  detected.eddystoneNamespace!,
-                  detected.eddystoneInstance!,
-                ),
-            orElse: () => null,
-          );
-    } else {
-      matchingBeacon = _beacons.cast<Beacon?>().firstWhere(
-            (b) =>
-                b != null &&
-                b.matchesIBeacon(
-                  detected.uuid!,
-                  detected.major,
-                  detected.minor,
-                ),
-            orElse: () => null,
-          );
-    }
+    // Find matching beacon
+    final beacon = _beacons.cast<Beacon?>().firstWhere(
+          (b) => b != null && b.matches(detected.uuid, detected.major, detected.minor),
+          orElse: () => null,
+        );
 
-    if (matchingBeacon == null) return;
-
-    // Capture non-null reference for use in closures
-    final beacon = matchingBeacon;
+    if (beacon == null) return;
 
     // Find campaign for this beacon
     final campaign = _subscribedCampaigns.cast<Campaign?>().firstWhere(

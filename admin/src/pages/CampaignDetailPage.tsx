@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Campaign, Beacon, FormSchema, FormField, BeaconType } from '../types'
+import { Campaign, Beacon, FormSchema, FormField } from '../types'
 import { ArrowLeft, Plus, Trash2, Bluetooth, FileText } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -147,34 +147,12 @@ export default function CampaignDetailPage() {
               beacons.map((beacon) => (
                 <div key={beacon.id} className="p-4 flex justify-between items-start">
                   <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium">{beacon.name}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded ${
-                        beacon.beacon_type === 'eddystone'
-                          ? 'bg-purple-100 text-purple-700'
-                          : 'bg-blue-100 text-blue-700'
-                      }`}>
-                        {beacon.beacon_type === 'eddystone' ? 'Eddystone' : 'iBeacon'}
-                      </span>
-                    </div>
-                    {beacon.beacon_type === 'eddystone' ? (
-                      <>
-                        <p className="text-sm text-gray-500 font-mono">
-                          NS: {beacon.eddystone_namespace}
-                        </p>
-                        <p className="text-sm text-gray-500 font-mono">
-                          ID: {beacon.eddystone_instance}
-                        </p>
-                      </>
-                    ) : (
-                      <>
-                        <p className="text-sm text-gray-500 font-mono">{beacon.beacon_uuid}</p>
-                        {(beacon.major != null || beacon.minor != null) && (
-                          <p className="text-sm text-gray-500">
-                            Major: {beacon.major ?? '-'} / Minor: {beacon.minor ?? '-'}
-                          </p>
-                        )}
-                      </>
+                    <p className="font-medium">{beacon.name}</p>
+                    <p className="text-sm text-gray-500 font-mono">{beacon.beacon_uuid}</p>
+                    {(beacon.major != null || beacon.minor != null) && (
+                      <p className="text-sm text-gray-500">
+                        Major: {beacon.major ?? '-'} / Minor: {beacon.minor ?? '-'}
+                      </p>
                     )}
                     {beacon.location_description && (
                       <p className="text-sm text-gray-500">{beacon.location_description}</p>
@@ -274,25 +252,14 @@ function BeaconModal({
   onSave: (beacon: Beacon) => void
 }) {
   const [name, setName] = useState('')
-  const [beaconType, setBeaconType] = useState<BeaconType>('eddystone')
-  // iBeacon fields
   const [uuid, setUuid] = useState('')
   const [major, setMajor] = useState('')
   const [minor, setMinor] = useState('')
-  // Eddystone fields
-  const [namespace, setNamespace] = useState('')
-  const [instance, setInstance] = useState('')
-  // Common fields
   const [location, setLocation] = useState('')
   const [saving, setSaving] = useState(false)
 
   const isValid = () => {
-    if (!name) return false
-    if (beaconType === 'ibeacon') {
-      return !!uuid
-    } else {
-      return !!namespace && !!instance
-    }
+    return !!name && !!uuid
   }
 
   const handleSave = async () => {
@@ -300,20 +267,13 @@ function BeaconModal({
     setSaving(true)
 
     try {
-      const beaconData: Record<string, unknown> = {
+      const beaconData = {
         campaign_id: campaignId,
         name,
-        beacon_type: beaconType,
+        beacon_uuid: uuid,
+        major: major ? parseInt(major) : null,
+        minor: minor ? parseInt(minor) : null,
         location_description: location || null,
-      }
-
-      if (beaconType === 'ibeacon') {
-        beaconData.beacon_uuid = uuid
-        beaconData.major = major ? parseInt(major) : null
-        beaconData.minor = minor ? parseInt(minor) : null
-      } else {
-        beaconData.eddystone_namespace = namespace.toLowerCase()
-        beaconData.eddystone_instance = instance.toLowerCase()
       }
 
       const { data, error } = await supabase
@@ -335,7 +295,7 @@ function BeaconModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
       <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
         <div className="p-4 border-b">
-          <h3 className="font-semibold">Add Beacon</h3>
+          <h3 className="font-semibold">Add iBeacon</h3>
         </div>
         <div className="p-4 space-y-4">
           <div>
@@ -350,100 +310,42 @@ function BeaconModal({
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-2">Beacon Type *</label>
-            <div className="flex gap-4">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="beaconType"
-                  value="eddystone"
-                  checked={beaconType === 'eddystone'}
-                  onChange={() => setBeaconType('eddystone')}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm">Eddystone-UID</span>
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="radio"
-                  name="beaconType"
-                  value="ibeacon"
-                  checked={beaconType === 'ibeacon'}
-                  onChange={() => setBeaconType('ibeacon')}
-                  className="w-4 h-4"
-                />
-                <span className="text-sm">iBeacon</span>
-              </label>
-            </div>
+            <label className="block text-sm font-medium mb-1">Beacon UUID *</label>
+            <input
+              type="text"
+              value={uuid}
+              onChange={(e) => setUuid(e.target.value)}
+              className="w-full px-3 py-2 border rounded-md font-mono text-sm"
+              placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000"
+            />
           </div>
 
-          {beaconType === 'eddystone' ? (
-            <>
-              <div>
-                <label className="block text-sm font-medium mb-1">Namespace ID * (10 bytes hex)</label>
-                <input
-                  type="text"
-                  value={namespace}
-                  onChange={(e) => setNamespace(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md font-mono text-sm"
-                  placeholder="e.g., 00112233445566778899"
-                  maxLength={20}
-                />
-                <p className="text-xs text-gray-500 mt-1">20 hex characters (10 bytes)</p>
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Instance ID * (6 bytes hex)</label>
-                <input
-                  type="text"
-                  value={instance}
-                  onChange={(e) => setInstance(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md font-mono text-sm"
-                  placeholder="e.g., 000000000001"
-                  maxLength={12}
-                />
-                <p className="text-xs text-gray-500 mt-1">12 hex characters (6 bytes)</p>
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <label className="block text-sm font-medium mb-1">Beacon UUID *</label>
-                <input
-                  type="text"
-                  value={uuid}
-                  onChange={(e) => setUuid(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-md font-mono text-sm"
-                  placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Major</label>
-                  <input
-                    type="number"
-                    value={major}
-                    onChange={(e) => setMajor(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-md"
-                    placeholder="0-65535"
-                    min={0}
-                    max={65535}
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">Minor</label>
-                  <input
-                    type="number"
-                    value={minor}
-                    onChange={(e) => setMinor(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-md"
-                    placeholder="0-65535"
-                    min={0}
-                    max={65535}
-                  />
-                </div>
-              </div>
-            </>
-          )}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-1">Major</label>
+              <input
+                type="number"
+                value={major}
+                onChange={(e) => setMajor(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="0-65535"
+                min={0}
+                max={65535}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium mb-1">Minor</label>
+              <input
+                type="number"
+                value={minor}
+                onChange={(e) => setMinor(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md"
+                placeholder="0-65535"
+                min={0}
+                max={65535}
+              />
+            </div>
+          </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">Location Description</label>

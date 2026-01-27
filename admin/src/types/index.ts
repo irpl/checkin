@@ -23,21 +23,13 @@ export interface Campaign {
   updated_at: string
 }
 
-export type BeaconType = 'ibeacon' | 'eddystone'
-
 export interface Beacon {
   id: string
   campaign_id: string
   name: string
-  beacon_type: BeaconType
-  // iBeacon fields
   beacon_uuid: string | null
   major: number | null
   minor: number | null
-  // Eddystone fields
-  eddystone_namespace: string | null
-  eddystone_instance: string | null
-  // Common fields
   location_description: string | null
   is_active: boolean
   created_at: string
