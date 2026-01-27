@@ -4,7 +4,18 @@
       "Bash(del \"c:\\\\Users\\\\philo\\\\Desktop\\\\checkin\\\\supabase\\\\migrations\\\\004_register_admin_function.sql\")",
       "Bash(ren:*)",
       "Bash(flutter create:*)",
-      "Bash(flutter pub get:*)"
+      "Bash(flutter pub get:*)",
+      "Bash(security find-identity:*)",
+      "Bash(pod:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(flutter --version:*)",
+      "Bash(/Users/philliplogan/dosktop/flutter/bin/flutter:*)",
+      "Bash(find:*)",
+      "Bash(plutil:*)",
+      "Bash(otool -L:*)",
+      "Bash(nm -g:*)",
+      "Bash(install_name_tool:*)",
+      "Bash(otool:*)"
     ]
   }
 }
