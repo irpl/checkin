@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_beacon/flutter_beacon.dart';
+import 'package:flutter_beacon/flutter_beacon.dart' as fb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/beacon.dart';
@@ -28,7 +28,7 @@ class DetectedBeacon {
 class BleService {
   final _detectedBeaconsController =
       StreamController<DetectedBeacon>.broadcast();
-  StreamSubscription<RangingResult>? _rangingSubscription;
+  StreamSubscription<fb.RangingResult>? _rangingSubscription;
   bool _isScanning = false;
   List<Beacon> _targetBeacons = [];
 
@@ -44,7 +44,7 @@ class BleService {
 
     // Initialize flutter_beacon
     try {
-      await flutterBeacon.initializeScanning;
+      await fb.flutterBeacon.initializeScanning;
     } catch (e) {
       debugPrint('BLE: Failed to initialize scanning: $e');
       throw Exception('Failed to initialize beacon scanning');
@@ -52,18 +52,18 @@ class BleService {
 
     // Check authorization status on iOS
     if (Platform.isIOS) {
-      final authStatus = await flutterBeacon.authorizationStatus;
+      final authStatus = await fb.flutterBeacon.authorizationStatus;
       debugPrint('BLE: iOS authorization status: $authStatus');
 
-      if (authStatus != AuthorizationStatus.allowed &&
-          authStatus != AuthorizationStatus.always) {
-        await flutterBeacon.requestAuthorization;
+      if (authStatus != fb.AuthorizationStatus.allowed &&
+          authStatus != fb.AuthorizationStatus.always) {
+        await fb.flutterBeacon.requestAuthorization;
       }
     }
 
     // Check if Bluetooth is enabled
-    final bluetoothState = await flutterBeacon.bluetoothState;
-    if (bluetoothState != BluetoothState.stateOn) {
+    final bluetoothState = await fb.flutterBeacon.bluetoothState;
+    if (bluetoothState != fb.BluetoothState.stateOn) {
       throw Exception('Bluetooth is not enabled');
     }
 
@@ -83,15 +83,15 @@ class BleService {
     final regions = uuids
         .asMap()
         .entries
-        .map((entry) => Region(
+        .map((entry) => fb.Region(
               identifier: 'region_${entry.key}',
               proximityUUID: entry.value,
             ))
         .toList();
 
     // Start ranging beacons
-    _rangingSubscription = flutterBeacon.ranging(regions).listen(
-      (RangingResult result) {
+    _rangingSubscription = fb.flutterBeacon.ranging(regions).listen(
+      (fb.RangingResult result) {
         _handleRangingResult(result);
       },
       onError: (error) {
@@ -100,7 +100,7 @@ class BleService {
     );
   }
 
-  void _handleRangingResult(RangingResult result) {
+  void _handleRangingResult(fb.RangingResult result) {
     for (final beacon in result.beacons) {
       final uuid = beacon.proximityUUID;
       final major = beacon.major;
@@ -134,8 +134,8 @@ class BleService {
   /// Check Bluetooth status
   Future<bool> isBluetoothEnabled() async {
     try {
-      final state = await flutterBeacon.bluetoothState;
-      return state == BluetoothState.stateOn;
+      final state = await fb.flutterBeacon.bluetoothState;
+      return state == fb.BluetoothState.stateOn;
     } catch (e) {
       return false;
     }
