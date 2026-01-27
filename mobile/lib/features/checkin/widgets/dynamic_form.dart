@@ -157,7 +157,7 @@ class _DynamicFormState extends State<DynamicForm> {
             labelText: field.label,
             border: const OutlineInputBorder(),
           ),
-          value: _formData[field.id]?.toString(),
+          initialValue: _formData[field.id]?.toString(),
           items: field.options
               ?.map((option) => DropdownMenuItem(
                     value: option,

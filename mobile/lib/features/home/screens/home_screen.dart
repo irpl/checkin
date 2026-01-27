@@ -20,7 +20,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _isScanning = false;
   List<Campaign> _subscribedCampaigns = [];
   List<Beacon> _beacons = [];
-  Map<String, DateTime> _detectedCampaigns = {};
+  final Map<String, DateTime> _detectedCampaigns = {};
   bool _isLoading = true;
 
   @override

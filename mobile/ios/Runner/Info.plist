@@ -45,5 +45,17 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+
+	<!-- Bluetooth permissions -->
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>This app uses Bluetooth to detect nearby check-in beacons.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>This app uses Bluetooth to detect nearby check-in beacons.</string>
+
+	<!-- Location permissions (required for iBeacon detection on iOS) -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app uses your location to detect nearby check-in beacons.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>This app uses your location to detect nearby check-in beacons even when in the background.</string>
 </dict>
 </plist>
