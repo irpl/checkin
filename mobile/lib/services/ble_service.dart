@@ -1,7 +1,6 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_beacon/flutter_beacon.dart' as fb;
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/beacon.dart';
@@ -24,11 +23,10 @@ class DetectedBeacon {
 }
 
 /// BLE scanning service for detecting iBeacons
-/// Uses CoreLocation on iOS (Apple-recommended) and BLE scanning on Android
 class BleService {
   final _detectedBeaconsController =
       StreamController<DetectedBeacon>.broadcast();
-  StreamSubscription<fb.RangingResult>? _rangingSubscription;
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
   bool _isScanning = false;
   List<Beacon> _targetBeacons = [];
 
@@ -40,105 +38,99 @@ class BleService {
   Future<void> startScanning(List<Beacon> beaconsToFind) async {
     if (_isScanning) return;
 
-    _targetBeacons = beaconsToFind;
-
-    // Initialize flutter_beacon
-    try {
-      await fb.flutterBeacon.initializeScanning;
-    } catch (e) {
-      debugPrint('BLE: Failed to initialize scanning: $e');
-      throw Exception('Failed to initialize beacon scanning');
+    if (!await FlutterBluePlus.isSupported) {
+      throw Exception('Bluetooth is not supported on this device');
     }
 
-    // Check authorization status on iOS
-    if (Platform.isIOS) {
-      final authStatus = await fb.flutterBeacon.authorizationStatus;
-      debugPrint('BLE: iOS authorization status: $authStatus');
-
-      if (authStatus != fb.AuthorizationStatus.allowed &&
-          authStatus != fb.AuthorizationStatus.always) {
-        await fb.flutterBeacon.requestAuthorization;
-      }
-    }
-
-    // Check if Bluetooth is enabled
-    final bluetoothState = await fb.flutterBeacon.bluetoothState;
-    if (bluetoothState != fb.BluetoothState.stateOn) {
+    final adapterState = await FlutterBluePlus.adapterState.first;
+    if (adapterState != BluetoothAdapterState.on) {
       throw Exception('Bluetooth is not enabled');
     }
 
     _isScanning = true;
-
-    // Get unique UUIDs from target beacons
-    final uuids = beaconsToFind
-        .where((b) => b.beaconUuid != null)
-        .map((b) => b.beaconUuid!)
-        .toSet()
-        .toList();
+    _targetBeacons = beaconsToFind;
 
     debugPrint('BLE: Starting scan for ${beaconsToFind.length} beacons');
-    debugPrint('BLE: UUIDs to monitor: $uuids');
+    debugPrint('BLE: UUIDs: ${beaconsToFind.map((b) => b.beaconUuid).toList()}');
 
-    // Create regions for each UUID
-    final regions = uuids
-        .asMap()
-        .entries
-        .map((entry) => fb.Region(
-              identifier: 'region_${entry.key}',
-              proximityUUID: entry.value,
-            ))
-        .toList();
+    // Start scanning with long timeout
+    await FlutterBluePlus.startScan(
+      timeout: const Duration(hours: 1),
+      androidScanMode: AndroidScanMode.lowLatency,
+    );
 
-    // Start ranging beacons
-    _rangingSubscription = fb.flutterBeacon.ranging(regions).listen(
-      (fb.RangingResult result) {
-        _handleRangingResult(result);
+    // Listen to scan results
+    _scanSubscription = FlutterBluePlus.scanResults.listen(
+      (results) {
+        for (final result in results) {
+          final detected = _tryParseIBeacon(result);
+          if (detected != null) {
+            _detectedBeaconsController.add(detected);
+          }
+        }
       },
       onError: (error) {
-        debugPrint('BLE: Ranging error: $error');
+        debugPrint('BLE: Scan error: $error');
       },
     );
   }
 
-  void _handleRangingResult(fb.RangingResult result) {
-    for (final beacon in result.beacons) {
-      final uuid = beacon.proximityUUID;
-      final major = beacon.major;
-      final minor = beacon.minor;
+  /// Try to parse iBeacon from manufacturer data (Apple company ID 0x004C)
+  DetectedBeacon? _tryParseIBeacon(ScanResult result) {
+    final manufacturerData = result.advertisementData.manufacturerData;
 
-      // Check if this matches any of our target beacons
-      for (final target in _targetBeacons) {
-        if (target.matches(uuid, major, minor)) {
-          _detectedBeaconsController.add(DetectedBeacon(
-            uuid: uuid,
-            major: major,
-            minor: minor,
-            rssi: beacon.rssi,
-            detectedAt: DateTime.now(),
-          ));
-          break;
-        }
+    final appleData = manufacturerData[0x004C];
+    if (appleData == null || appleData.length < 23) return null;
+
+    // Check iBeacon prefix: 0x02 0x15
+    if (appleData[0] != 0x02 || appleData[1] != 0x15) return null;
+
+    // Parse UUID (bytes 2-17)
+    final uuidBytes = appleData.sublist(2, 18);
+    final uuid = _bytesToUuid(uuidBytes);
+
+    // Parse Major (bytes 18-19) and Minor (bytes 20-21)
+    final major = (appleData[18] << 8) | appleData[19];
+    final minor = (appleData[20] << 8) | appleData[21];
+
+    // Check if this matches any of our target beacons
+    for (final target in _targetBeacons) {
+      if (target.matches(uuid, major, minor)) {
+        return DetectedBeacon(
+          uuid: uuid,
+          major: major,
+          minor: minor,
+          rssi: result.rssi,
+          detectedAt: DateTime.now(),
+        );
       }
     }
+
+    return null;
+  }
+
+  /// Convert bytes to UUID string format
+  String _bytesToUuid(List<int> bytes) {
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-'
+        '${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
   }
 
   /// Stop scanning
   Future<void> stopScanning() async {
     if (!_isScanning) return;
 
-    await _rangingSubscription?.cancel();
-    _rangingSubscription = null;
+    await FlutterBluePlus.stopScan();
+    await _scanSubscription?.cancel();
+    _scanSubscription = null;
     _isScanning = false;
   }
 
   /// Check Bluetooth status
   Future<bool> isBluetoothEnabled() async {
-    try {
-      final state = await fb.flutterBeacon.bluetoothState;
-      return state == fb.BluetoothState.stateOn;
-    } catch (e) {
-      return false;
-    }
+    if (!await FlutterBluePlus.isSupported) return false;
+    final state = await FlutterBluePlus.adapterState.first;
+    return state == BluetoothAdapterState.on;
   }
 
   void dispose() {
