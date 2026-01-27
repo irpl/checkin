@@ -15,7 +15,8 @@
       "Bash(otool -L:*)",
       "Bash(nm -g:*)",
       "Bash(install_name_tool:*)",
-      "Bash(otool:*)"
+      "Bash(otool:*)",
+      "Bash(flutter run:*)"
     ]
   }
 }
