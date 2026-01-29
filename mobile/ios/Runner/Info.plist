@@ -57,5 +57,11 @@
 	<string>This app uses your location to detect nearby check-in beacons.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>This app uses your location to detect nearby check-in beacons even when in the background.</string>
+
+	<!-- Background modes for BLE -->
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-central</string>
+	</array>
 </dict>
 </plist>

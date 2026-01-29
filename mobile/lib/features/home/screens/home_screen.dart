@@ -26,9 +26,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _initializeNotifications();
-    _loadData();
-    _requestPermissions();
+    // Defer initialization until after first frame to ensure ref is ready
+    Future.microtask(() {
+      _initializeNotifications();
+      _loadData();
+      _requestPermissions();
+    });
   }
 
   Future<void> _initializeNotifications() async {
