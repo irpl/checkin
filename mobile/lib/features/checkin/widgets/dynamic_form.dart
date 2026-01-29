@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../models/form_schema.dart';
 
@@ -6,13 +8,28 @@ class DynamicForm extends StatefulWidget {
   final FormSchema form;
   final Function(Map<String, dynamic>) onSubmit;
   final bool isSubmitting;
+  final String campaignId;
+  final Map<String, dynamic>? savedResponse;
 
   const DynamicForm({
     super.key,
     required this.form,
     required this.onSubmit,
+    required this.campaignId,
     this.isSubmitting = false,
+    this.savedResponse,
   });
+
+  static String _storageKey(String campaignId) =>
+      'form_response_$campaignId';
+
+  static Future<Map<String, dynamic>?> loadSavedResponse(
+      String campaignId) async {
+    final prefs = await SharedPreferences.getInstance();
+    final json = prefs.getString(_storageKey(campaignId));
+    if (json == null) return null;
+    return Map<String, dynamic>.from(jsonDecode(json));
+  }
 
   @override
   State<DynamicForm> createState() => _DynamicFormState();
@@ -21,12 +38,19 @@ class DynamicForm extends StatefulWidget {
 class _DynamicFormState extends State<DynamicForm> {
   final _formKey = GlobalKey<FormState>();
   final Map<String, dynamic> _formData = {};
+  bool _saveForNextTime = false;
 
   @override
   void initState() {
     super.initState();
-    // Initialize default values
+    // Pre-fill from saved response if available
+    if (widget.savedResponse != null) {
+      _formData.addAll(widget.savedResponse!);
+      _saveForNextTime = true;
+    }
+    // Fill remaining defaults
     for (final field in widget.form.fields) {
+      if (_formData.containsKey(field.id)) continue;
       if (field.defaultValue != null) {
         _formData[field.id] = field.defaultValue;
       } else if (field.type == 'checkbox') {
@@ -35,10 +59,18 @@ class _DynamicFormState extends State<DynamicForm> {
     }
   }
 
-  void _submit() {
-    if (_formKey.currentState!.validate()) {
-      widget.onSubmit(_formData);
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final key = DynamicForm._storageKey(widget.campaignId);
+    if (_saveForNextTime) {
+      await prefs.setString(key, jsonEncode(_formData));
+    } else {
+      await prefs.remove(key);
     }
+
+    widget.onSubmit(_formData);
   }
 
   @override
@@ -68,7 +100,23 @@ class _DynamicFormState extends State<DynamicForm> {
                   padding: const EdgeInsets.only(bottom: 16),
                   child: _buildField(field),
                 )),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
+            CheckboxListTile(
+              title: const Text('Save my responses for next time'),
+              subtitle: const Text(
+                'Pre-fill this form on your next check-in',
+                style: TextStyle(fontSize: 12),
+              ),
+              value: _saveForNextTime,
+              onChanged: (value) {
+                setState(() {
+                  _saveForNextTime = value ?? false;
+                });
+              },
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+            ),
+            const SizedBox(height: 16),
             FilledButton(
               onPressed: widget.isSubmitting ? null : _submit,
               style: FilledButton.styleFrom(

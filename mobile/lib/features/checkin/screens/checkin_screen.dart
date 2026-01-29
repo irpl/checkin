@@ -21,6 +21,7 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
   Campaign? _campaign;
   FormSchema? _form;
   Checkin? _checkin;
+  Map<String, dynamic>? _savedResponse;
   bool _isLoading = true;
   bool _isSubmitting = false;
   CheckinStep _currentStep = CheckinStep.loading;
@@ -49,6 +50,12 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
       // Load form if exists
       final form = await supabase.getFormForCampaign(widget.campaignId);
 
+      // Load saved form response if form exists
+      Map<String, dynamic>? savedResponse;
+      if (form != null) {
+        savedResponse = await DynamicForm.loadSavedResponse(widget.campaignId);
+      }
+
       // Check for existing active check-in
       var checkin = await supabase.getActiveCheckin(widget.campaignId);
 
@@ -59,6 +66,7 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
         _campaign = campaign;
         _form = form;
         _checkin = checkin;
+        _savedResponse = savedResponse;
         _isLoading = false;
         _currentStep = _determineStep(checkin!, campaign, form);
       });
@@ -285,8 +293,10 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
   Widget _buildFormStep() {
     return DynamicForm(
       form: _form!,
+      campaignId: widget.campaignId,
       onSubmit: _completeCheckin,
       isSubmitting: _isSubmitting,
+      savedResponse: _savedResponse,
     );
   }
 

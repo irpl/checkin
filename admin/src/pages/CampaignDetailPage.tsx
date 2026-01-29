@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Campaign, Beacon, FormSchema, FormField } from '../types'
-import { ArrowLeft, Plus, Trash2, Bluetooth, FileText } from 'lucide-react'
+import { Campaign, Beacon, FormSchema, FormField, Checkin } from '../types'
+import { ArrowLeft, Plus, Trash2, Bluetooth, FileText, ClipboardList } from 'lucide-react'
 import { format } from 'date-fns'
 
 export default function CampaignDetailPage() {
@@ -10,9 +10,66 @@ export default function CampaignDetailPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [beacons, setBeacons] = useState<Beacon[]>([])
   const [form, setForm] = useState<FormSchema | null>(null)
+  const [checkins, setCheckins] = useState<Checkin[]>([])
   const [loading, setLoading] = useState(true)
   const [showBeaconModal, setShowBeaconModal] = useState(false)
   const [showFormModal, setShowFormModal] = useState(false)
+  const [groupByFields, setGroupByFields] = useState<string[]>([])
+
+  // Fields that can be used for grouping (select and checkbox only)
+  const groupableFields = useMemo(() => {
+    if (!form) return []
+    return form.schema.fields.filter((f) => f.type === 'select' || f.type === 'checkbox')
+  }, [form])
+
+  // Compute grouped check-ins based on selected groupBy fields
+  const groupedCheckins = useMemo(() => {
+    if (groupByFields.length === 0 || !form) return null
+
+    const groups = new Map<string, { label: string; checkins: Checkin[] }>()
+
+    for (const checkin of checkins) {
+      // Build composite key from all selected group fields
+      const keyParts: string[] = []
+      const labelParts: string[] = []
+
+      for (const fieldId of groupByFields) {
+        const field = form.schema.fields.find((f) => f.id === fieldId)
+        if (!field) continue
+
+        const rawValue = checkin.form_response?.[fieldId]
+        let displayValue: string
+
+        if (field.type === 'checkbox') {
+          displayValue = rawValue === true || rawValue === 'true' ? 'Yes' : 'No'
+        } else {
+          displayValue = rawValue != null ? String(rawValue) : '(empty)'
+        }
+
+        keyParts.push(`${fieldId}:${displayValue}`)
+        labelParts.push(`${field.label}: ${displayValue}`)
+      }
+
+      const key = keyParts.join('|')
+      const label = labelParts.join(' / ')
+
+      if (!groups.has(key)) {
+        groups.set(key, { label, checkins: [] })
+      }
+      groups.get(key)!.checkins.push(checkin)
+    }
+
+    // Sort groups by label
+    return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label))
+  }, [checkins, groupByFields, form])
+
+  const toggleGroupByField = (fieldId: string) => {
+    setGroupByFields((prev) =>
+      prev.includes(fieldId)
+        ? prev.filter((id) => id !== fieldId)
+        : [...prev, fieldId]
+    )
+  }
 
   useEffect(() => {
     if (id) loadCampaign()
@@ -20,15 +77,21 @@ export default function CampaignDetailPage() {
 
   const loadCampaign = async () => {
     try {
-      const [campaignRes, beaconsRes, formRes] = await Promise.all([
+      const [campaignRes, beaconsRes, formRes, checkinsRes] = await Promise.all([
         supabase.from('campaigns').select('*').eq('id', id).single(),
         supabase.from('beacons').select('*').eq('campaign_id', id),
         supabase.from('forms').select('*').eq('campaign_id', id).maybeSingle(),
+        supabase
+          .from('checkins')
+          .select('*, client:clients(name, email)')
+          .eq('campaign_id', id)
+          .order('created_at', { ascending: false }),
       ])
 
       setCampaign(campaignRes.data)
       setBeacons(beaconsRes.data || [])
       setForm(formRes.data)
+      setCheckins(checkinsRes.data || [])
     } finally {
       setLoading(false)
     }
@@ -214,6 +277,68 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
+      {/* Check-in Responses */}
+      <div className="bg-white rounded-lg shadow mt-6">
+        <div className="p-4 border-b flex justify-between items-center">
+          <div className="flex items-center gap-2">
+            <ClipboardList size={20} className="text-orange-600" />
+            <h2 className="font-semibold">Check-in Responses ({checkins.length})</h2>
+          </div>
+        </div>
+
+        {/* Group By controls */}
+        {groupableFields.length > 0 && checkins.length > 0 && (
+          <div className="p-4 border-b bg-gray-50">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-sm font-medium text-gray-600">Group by:</span>
+              {groupableFields.map((field) => (
+                <button
+                  key={field.id}
+                  onClick={() => toggleGroupByField(field.id)}
+                  className={`text-sm px-3 py-1 rounded-full border transition-colors ${
+                    groupByFields.includes(field.id)
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                  }`}
+                >
+                  {field.label}
+                </button>
+              ))}
+              {groupByFields.length > 0 && (
+                <button
+                  onClick={() => setGroupByFields([])}
+                  className="text-sm text-gray-500 hover:text-gray-700 underline"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {checkins.length === 0 ? (
+          <div className="p-8 text-gray-500 text-center">
+            No check-ins yet.
+          </div>
+        ) : groupedCheckins ? (
+          <div className="divide-y">
+            {groupedCheckins.map((group) => (
+              <div key={group.label}>
+                <div className="px-4 py-3 bg-gray-50 border-b">
+                  <span className="font-medium">{group.label}</span>
+                  <span className="text-sm text-gray-500 ml-2">
+                    ({group.checkins.length} {group.checkins.length === 1 ? 'response' : 'responses'})
+                  </span>
+                </div>
+                <CheckinTable checkins={group.checkins} form={form} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <CheckinTable checkins={checkins} form={form} />
+        )}
+      </div>
+
       {/* Beacon Modal */}
       {showBeaconModal && (
         <BeaconModal
@@ -238,6 +363,61 @@ export default function CampaignDetailPage() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function CheckinTable({ checkins, form }: { checkins: Checkin[]; form: FormSchema | null }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-gray-50">
+            <th className="text-left p-3 font-medium">Client</th>
+            <th className="text-left p-3 font-medium">Email</th>
+            <th className="text-left p-3 font-medium">Status</th>
+            {form?.schema.fields.map((field) => (
+              <th key={field.id} className="text-left p-3 font-medium">
+                {field.label}
+              </th>
+            ))}
+            <th className="text-left p-3 font-medium">Checked In</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {checkins.map((checkin) => (
+            <tr key={checkin.id} className="hover:bg-gray-50">
+              <td className="p-3">{checkin.client?.name ?? '-'}</td>
+              <td className="p-3 text-gray-500">{checkin.client?.email ?? '-'}</td>
+              <td className="p-3">
+                <span className={`text-xs px-2 py-0.5 rounded ${
+                  checkin.status === 'completed'
+                    ? 'bg-green-100 text-green-700'
+                    : checkin.status === 'confirmed'
+                    ? 'bg-blue-100 text-blue-700'
+                    : checkin.status === 'expired'
+                    ? 'bg-red-100 text-red-700'
+                    : 'bg-yellow-100 text-yellow-700'
+                }`}>
+                  {checkin.status}
+                </span>
+              </td>
+              {form?.schema.fields.map((field) => (
+                <td key={field.id} className="p-3">
+                  {checkin.form_response
+                    ? String(checkin.form_response[field.id] ?? '-')
+                    : '-'}
+                </td>
+              ))}
+              <td className="p-3 text-gray-500">
+                {checkin.checked_in_at
+                  ? format(new Date(checkin.checked_in_at), 'MMM d, yyyy h:mm a')
+                  : '-'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
