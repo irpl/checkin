@@ -5,6 +5,17 @@ export interface Organization {
   updated_at: string
 }
 
+export interface CampaignTimeBlock {
+  id: string
+  campaign_id: string
+  day_of_week: number  // 0=Sunday, 1=Monday, ..., 6=Saturday
+  start_time: string   // TIME format: "HH:MM:SS"
+  end_time: string     // TIME format: "HH:MM:SS"
+  presence_percentage: number | null  // Override for this block, null = use campaign default
+  created_at: string
+  updated_at: string
+}
+
 export interface Campaign {
   id: string
   organization_id: string
@@ -14,10 +25,12 @@ export interface Campaign {
   required_duration_minutes: number
   required_presence_percentage: number
   proximity_delay_seconds: number
-  // Time restrictions
+  // Time restrictions (legacy - kept for backward compatibility)
   time_restriction_enabled: boolean
   allowed_start_time: string | null  // TIME format: "HH:MM:SS"
   allowed_end_time: string | null    // TIME format: "HH:MM:SS"
+  // New time blocks system
+  time_blocks?: CampaignTimeBlock[]
   is_active: boolean
   created_at: string
   updated_at: string

@@ -2,9 +2,8 @@ PODS:
   - app_links (6.4.1):
     - Flutter
   - Flutter (1.0.0)
-  - flutter_blue_plus_darwin (0.0.2):
+  - flutter_beacon (0.3.0):
     - Flutter
-    - FlutterMacOS
   - flutter_local_notifications (0.0.1):
     - Flutter
   - path_provider_foundation (0.0.1):
@@ -21,7 +20,7 @@ PODS:
 DEPENDENCIES:
   - app_links (from `.symlinks/plugins/app_links/ios`)
   - Flutter (from `Flutter`)
-  - flutter_blue_plus_darwin (from `.symlinks/plugins/flutter_blue_plus_darwin/darwin`)
+  - flutter_beacon (from `.symlinks/plugins/flutter_beacon/ios`)
   - flutter_local_notifications (from `.symlinks/plugins/flutter_local_notifications/ios`)
   - path_provider_foundation (from `.symlinks/plugins/path_provider_foundation/darwin`)
   - permission_handler_apple (from `.symlinks/plugins/permission_handler_apple/ios`)
@@ -33,8 +32,8 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/app_links/ios"
   Flutter:
     :path: Flutter
-  flutter_blue_plus_darwin:
-    :path: ".symlinks/plugins/flutter_blue_plus_darwin/darwin"
+  flutter_beacon:
+    :path: ".symlinks/plugins/flutter_beacon/ios"
   flutter_local_notifications:
     :path: ".symlinks/plugins/flutter_local_notifications/ios"
   path_provider_foundation:
@@ -49,7 +48,7 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   app_links: 3dbc685f76b1693c66a6d9dd1e9ab6f73d97dc0a
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
-  flutter_blue_plus_darwin: 20a08bfeaa0f7804d524858d3d8744bcc1b6dbc3
+  flutter_beacon: 77b4a6a3ac38b761bf4ed9beb6b3becc819aae12
   flutter_local_notifications: ad39620c743ea4c15127860f4b5641649a988100
   path_provider_foundation: 080d55be775b7414fd5a5ef3ac137b97b097e564
   permission_handler_apple: 4ed2196e43d0651e8ff7ca3483a069d469701f2d

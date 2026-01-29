@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Campaign, Beacon, FormSchema, FormField, Checkin } from '../types'
-import { ArrowLeft, Plus, Trash2, Bluetooth, FileText, ClipboardList } from 'lucide-react'
+import { Campaign, Beacon, FormSchema, FormField, Checkin, CampaignTimeBlock } from '../types'
+import { ArrowLeft, Plus, Trash2, Bluetooth, FileText, ClipboardList, Calendar } from 'lucide-react'
 import { format } from 'date-fns'
+
+const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 export default function CampaignDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -78,7 +80,7 @@ export default function CampaignDetailPage() {
   const loadCampaign = async () => {
     try {
       const [campaignRes, beaconsRes, formRes, checkinsRes] = await Promise.all([
-        supabase.from('campaigns').select('*').eq('id', id).single(),
+        supabase.from('campaigns').select('*, time_blocks:campaign_time_blocks(*)').eq('id', id).single(),
         supabase.from('beacons').select('*').eq('campaign_id', id),
         supabase.from('forms').select('*').eq('campaign_id', id).maybeSingle(),
         supabase
@@ -169,20 +171,58 @@ export default function CampaignDetailPage() {
             <p className="font-medium">{campaign.proximity_delay_seconds}s</p>
           </div>
           <div>
-            <p className="text-sm text-gray-500">Time Restriction</p>
-            <p className="font-medium">
-              {campaign.time_restriction_enabled && campaign.allowed_start_time && campaign.allowed_end_time
-                ? `${campaign.allowed_start_time.slice(0, 5)} - ${campaign.allowed_end_time.slice(0, 5)}`
-                : 'None'}
-            </p>
-          </div>
-          <div>
             <p className="text-sm text-gray-500">Created</p>
             <p className="font-medium">
               {format(new Date(campaign.created_at), 'MMM d, yyyy')}
             </p>
           </div>
         </div>
+
+        {/* Time Blocks Section */}
+        {campaign.time_blocks && campaign.time_blocks.length > 0 && (
+          <div className="mt-6 pt-6 border-t">
+            <div className="flex items-center gap-2 mb-3">
+              <Calendar size={18} className="text-blue-600" />
+              <h3 className="font-semibold">Scheduled Times</h3>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {campaign.time_blocks
+                .sort((a, b) => a.day_of_week - b.day_of_week)
+                .map((block) => (
+                  <div key={block.id} className="bg-gray-50 rounded p-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium text-gray-900">
+                          {DAYS_OF_WEEK[block.day_of_week]}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          {block.start_time.slice(0, 5)} - {block.end_time.slice(0, 5)}
+                        </p>
+                      </div>
+                      {block.presence_percentage && (
+                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                          {block.presence_percentage}% required
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Legacy time restriction display */}
+        {(!campaign.time_blocks || campaign.time_blocks.length === 0) &&
+         campaign.time_restriction_enabled &&
+         campaign.allowed_start_time &&
+         campaign.allowed_end_time && (
+          <div className="mt-6 pt-6 border-t">
+            <p className="text-sm text-gray-500 mb-1">Time Restriction (Legacy)</p>
+            <p className="font-medium">
+              {campaign.allowed_start_time.slice(0, 5)} - {campaign.allowed_end_time.slice(0, 5)}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

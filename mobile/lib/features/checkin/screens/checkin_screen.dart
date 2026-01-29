@@ -47,6 +47,14 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
         throw Exception('Campaign not found');
       }
 
+      // Validate time restrictions
+      if (!campaign.isCheckinAllowedNow()) {
+        throw Exception(
+          'Check-in is not allowed at this time. '
+          '${campaign.timeBlocks.isNotEmpty ? _getNextTimeBlockMessage(campaign) : "Please check the campaign schedule."}',
+        );
+      }
+
       // Load form if exists
       final form = await supabase.getFormForCampaign(widget.campaignId);
 
@@ -102,6 +110,65 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
     // For duration-based, would need to track presence over time
     // For MVP, just go to confirmation
     return CheckinStep.confirm;
+  }
+
+  String _getNextTimeBlockMessage(Campaign campaign) {
+    final now = DateTime.now();
+    final currentDayOfWeek = now.weekday % 7;
+
+    // Find the next available time block
+    CampaignTimeBlock? nextBlock;
+    int daysUntilNext = 7;
+
+    // Look through the next 7 days
+    for (int i = 0; i < 7; i++) {
+      final checkDay = (currentDayOfWeek + i) % 7;
+      final blocksForDay = campaign.timeBlocks
+          .where((block) => block.dayOfWeek == checkDay)
+          .toList();
+
+      for (final block in blocksForDay) {
+        // If it's today, check if the time hasn't passed yet
+        if (i == 0) {
+          final blockStart = _parseTimeString(block.startTime);
+          final currentTime = now.hour * 3600 + now.minute * 60 + now.second;
+          if (blockStart != null && currentTime < blockStart) {
+            nextBlock = block;
+            daysUntilNext = 0;
+            break;
+          }
+        } else {
+          // Future day
+          nextBlock = block;
+          daysUntilNext = i;
+          break;
+        }
+      }
+
+      if (nextBlock != null) break;
+    }
+
+    if (nextBlock != null) {
+      if (daysUntilNext == 0) {
+        return 'Next check-in is today at ${nextBlock.timeDisplay}.';
+      } else if (daysUntilNext == 1) {
+        return 'Next check-in is tomorrow (${nextBlock.dayName}) at ${nextBlock.timeDisplay}.';
+      } else {
+        return 'Next check-in is on ${nextBlock.dayName} at ${nextBlock.timeDisplay}.';
+      }
+    }
+
+    return 'Please check the campaign schedule.';
+  }
+
+  int? _parseTimeString(String timeStr) {
+    final parts = timeStr.split(':');
+    if (parts.length < 2) return null;
+    final hours = int.tryParse(parts[0]);
+    final minutes = int.tryParse(parts[1]);
+    final seconds = parts.length > 2 ? int.tryParse(parts[2]) ?? 0 : 0;
+    if (hours == null || minutes == null) return null;
+    return hours * 3600 + minutes * 60 + seconds;
   }
 
   Future<void> _confirmPresence() async {
@@ -263,6 +330,61 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
               textAlign: TextAlign.center,
+            ),
+          ],
+          if (_campaign?.campaignType == 'duration') ...[
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.schedule,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Duration Required: ${_campaign!.requiredDurationMinutes} min',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.check_circle_outline,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Presence Required: ${_campaign!.getEffectivePresencePercentage()}%',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                    ],
+                  ),
+                  if (_campaign!.getCurrentTimeBlock()?.presencePercentage != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      '(Custom for this time slot)',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontStyle: FontStyle.italic,
+                          ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
           const SizedBox(height: 48),

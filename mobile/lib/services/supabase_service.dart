@@ -65,7 +65,7 @@ class SupabaseService {
   Future<List<Campaign>> getActiveCampaigns() async {
     final response = await _client
         .from('campaigns')
-        .select()
+        .select('*, time_blocks:campaign_time_blocks(*)')
         .eq('is_active', true)
         .order('created_at', ascending: false);
 
@@ -78,7 +78,7 @@ class SupabaseService {
 
     final response = await _client
         .from('subscriptions')
-        .select('campaign:campaigns(*)')
+        .select('campaign:campaigns(*, time_blocks:campaign_time_blocks(*))')
         .eq('client_id', user.id)
         .eq('is_active', true);
 
@@ -90,7 +90,7 @@ class SupabaseService {
   Future<Campaign?> getCampaign(String id) async {
     final response = await _client
         .from('campaigns')
-        .select()
+        .select('*, time_blocks:campaign_time_blocks(*)')
         .eq('id', id)
         .maybeSingle();
 

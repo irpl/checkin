@@ -191,7 +191,7 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
                               _buildDetailRow(
                                 context,
                                 'Presence Required',
-                                '${_campaign!.requiredPresencePercentage}%',
+                                '${_campaign!.getEffectivePresencePercentage()}%',
                               ),
                             ],
                             if (_campaign!.proximityDelaySeconds > 0)
@@ -200,6 +200,90 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
                                 'Proximity Delay',
                                 '${_campaign!.proximityDelaySeconds} seconds',
                               ),
+                            if (_campaign!.timeBlocks.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              const Divider(),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Scheduled Times',
+                                style: Theme.of(context).textTheme.titleSmall,
+                              ),
+                              const SizedBox(height: 8),
+                              ..._campaign!.timeBlocks.map((block) {
+                                final isCurrentBlock = _campaign!.getCurrentTimeBlock()?.id == block.id;
+                                return Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isCurrentBlock
+                                        ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
+                                        : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: isCurrentBlock
+                                        ? Border.all(
+                                            color: Theme.of(context).colorScheme.primary,
+                                            width: 2,
+                                          )
+                                        : null,
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            block.dayName,
+                                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            block.timeDisplay,
+                                            style: Theme.of(context).textTheme.bodySmall,
+                                          ),
+                                        ],
+                                      ),
+                                      if (block.presencePercentage != null)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context).colorScheme.secondaryContainer,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            '${block.presencePercentage}% required',
+                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                                                ),
+                                          ),
+                                        ),
+                                      if (isCurrentBlock)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Theme.of(context).colorScheme.primary,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            'Active Now',
+                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                                  color: Theme.of(context).colorScheme.onPrimary,
+                                                ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                );
+                              }),
+                            ],
                           ],
                         ),
                       ),

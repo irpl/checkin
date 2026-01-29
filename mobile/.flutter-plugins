@@ -2,11 +2,7 @@
 app_links=/Users/philliplogan/.pub-cache/hosted/pub.dev/app_links-6.4.1/
 app_links_linux=/Users/philliplogan/.pub-cache/hosted/pub.dev/app_links_linux-1.0.3/
 app_links_web=/Users/philliplogan/.pub-cache/hosted/pub.dev/app_links_web-1.0.4/
-flutter_blue_plus=/Users/philliplogan/.pub-cache/hosted/pub.dev/flutter_blue_plus-1.36.8/
-flutter_blue_plus_android=/Users/philliplogan/.pub-cache/hosted/pub.dev/flutter_blue_plus_android-7.0.4/
-flutter_blue_plus_darwin=/Users/philliplogan/.pub-cache/hosted/pub.dev/flutter_blue_plus_darwin-7.0.3/
-flutter_blue_plus_linux=/Users/philliplogan/.pub-cache/hosted/pub.dev/flutter_blue_plus_linux-7.0.3/
-flutter_blue_plus_web=/Users/philliplogan/.pub-cache/hosted/pub.dev/flutter_blue_plus_web-7.0.2/
+flutter_beacon=/Users/philliplogan/.pub-cache/hosted/pub.dev/flutter_beacon-0.5.1/
 flutter_local_notifications=/Users/philliplogan/.pub-cache/hosted/pub.dev/flutter_local_notifications-17.2.4/
 flutter_local_notifications_linux=/Users/philliplogan/.pub-cache/hosted/pub.dev/flutter_local_notifications_linux-4.0.1/
 gtk=/Users/philliplogan/.pub-cache/hosted/pub.dev/gtk-2.1.0/
