@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:flutter_beacon/flutter_beacon.dart' as fb;
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../models/beacon.dart';
@@ -26,29 +26,13 @@ class DetectedBeacon {
 class BleService {
   final _detectedBeaconsController =
       StreamController<DetectedBeacon>.broadcast();
-  StreamSubscription<fb.RangingResult>? _rangingSubscription;
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
   bool _isScanning = false;
-  bool _isInitialized = false;
   List<Beacon> _targetBeacons = [];
 
   Stream<DetectedBeacon> get detectedBeacons =>
       _detectedBeaconsController.stream;
   bool get isScanning => _isScanning;
-
-  /// Initialize the beacon scanner
-  Future<void> _initialize() async {
-    if (_isInitialized) return;
-
-    try {
-      // Initialize and check location/bluetooth permissions
-      await fb.flutterBeacon.initializeScanning;
-      _isInitialized = true;
-      debugPrint('BLE: Flutter Beacon initialized');
-    } catch (e) {
-      debugPrint('BLE: Initialization error: $e');
-      throw Exception('Failed to initialize beacon scanner: $e');
-    }
-  }
 
   /// Start scanning for iBeacons
   Future<void> startScanning(List<Beacon> beaconsToFind) async {
@@ -57,106 +41,85 @@ class BleService {
       throw Exception('No beacons to scan for');
     }
 
-    await _initialize();
-
     _isScanning = true;
     _targetBeacons = beaconsToFind;
 
     debugPrint('BLE: Starting scan for ${beaconsToFind.length} beacons');
-    debugPrint('BLE: UUIDs: ${beaconsToFind.map((b) => b.beaconUuid).toList()}');
 
-    // Create regions for each unique UUID
-    final regions = _createRegions(beaconsToFind);
-    debugPrint('BLE: Created ${regions.length} regions');
+    // Start scanning
+    await FlutterBluePlus.startScan(
+      timeout: const Duration(hours: 24), // Long-running scan
+      androidUsesFineLocation: true,
+    );
 
-    // Start ranging beacons
-    _rangingSubscription = fb.flutterBeacon.ranging(regions).listen(
-      (fb.RangingResult result) {
-        _handleRangingResult(result);
+    _scanSubscription = FlutterBluePlus.scanResults.listen(
+      (results) {
+        for (final result in results) {
+          _processAdvertisementData(result);
+        }
       },
       onError: (error) {
-        debugPrint('BLE: Ranging error: $error');
+        debugPrint('BLE: Scan error: $error');
       },
     );
   }
 
-  /// Create regions from beacon list (one region per unique UUID)
-  List<fb.Region> _createRegions(List<Beacon> beacons) {
-    final uniqueUuids = <String>{};
-    final regions = <fb.Region>[];
+  /// Process advertisement data to detect iBeacons
+  void _processAdvertisementData(ScanResult result) {
+    final manufacturerData = result.advertisementData.manufacturerData;
 
-    for (final beacon in beacons) {
-      final beaconUuid = beacon.beaconUuid;
-      if (beaconUuid == null) continue; // Skip beacons without UUID
+    // iBeacon uses Apple's company ID: 0x004C
+    final appleData = manufacturerData[0x004C];
+    if (appleData == null || appleData.length < 23) return;
 
-      final uuid = beaconUuid.toUpperCase();
-      if (uniqueUuids.add(uuid)) {
-        regions.add(fb.Region(
-          identifier: 'region_$uuid',
-          proximityUUID: uuid,
-        ));
-      }
-    }
+    // Check iBeacon prefix: 0x02 0x15
+    if (appleData[0] != 0x02 || appleData[1] != 0x15) return;
 
-    return regions;
-  }
-
-  /// Handle ranging results from flutter_beacon
-  void _handleRangingResult(fb.RangingResult result) {
-    if (result.beacons.isEmpty) return;
-
-    for (final beacon in result.beacons) {
-      final detected = _tryMatchBeacon(beacon);
-      if (detected != null) {
-        _detectedBeaconsController.add(detected);
-      }
-    }
-  }
-
-  /// Try to match a detected beacon with our target beacons
-  DetectedBeacon? _tryMatchBeacon(fb.Beacon beacon) {
-    final uuid = beacon.proximityUUID.toUpperCase();
-    final major = beacon.major;
-    final minor = beacon.minor;
+    // Parse iBeacon data
+    final uuid = _parseUuid(appleData.sublist(2, 18));
+    final major = (appleData[18] << 8) + appleData[19];
+    final minor = (appleData[20] << 8) + appleData[21];
 
     // Check if this matches any of our target beacons
     for (final target in _targetBeacons) {
       if (target.matches(uuid, major, minor)) {
         debugPrint(
-            'BLE: Detected beacon - UUID: $uuid, Major: $major, Minor: $minor, RSSI: ${beacon.rssi}');
+            'BLE: Detected iBeacon - UUID: $uuid, Major: $major, Minor: $minor, RSSI: ${result.rssi}');
 
-        return DetectedBeacon(
+        _detectedBeaconsController.add(DetectedBeacon(
           uuid: uuid,
           major: major,
           minor: minor,
-          rssi: beacon.rssi,
+          rssi: result.rssi,
           detectedAt: DateTime.now(),
-        );
+        ));
+        break;
       }
     }
+  }
 
-    return null;
+  /// Parse UUID bytes into string format
+  String _parseUuid(List<int> bytes) {
+    final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}'
+        .toUpperCase();
   }
 
   /// Stop scanning
   Future<void> stopScanning() async {
     if (!_isScanning) return;
 
-    await _rangingSubscription?.cancel();
-    _rangingSubscription = null;
+    await FlutterBluePlus.stopScan();
+    await _scanSubscription?.cancel();
+    _scanSubscription = null;
     _isScanning = false;
     debugPrint('BLE: Stopped scanning');
   }
 
   /// Check if Bluetooth is enabled
   Future<bool> isBluetoothEnabled() async {
-    try {
-      await _initialize();
-      // flutter_beacon handles permission checks internally
-      return true;
-    } catch (e) {
-      return false;
-    }
+    final state = await FlutterBluePlus.adapterState.first;
+    return state == BluetoothAdapterState.on;
   }
 
   void dispose() {
@@ -170,10 +133,4 @@ final bleServiceProvider = Provider<BleService>((ref) {
   final service = BleService();
   ref.onDispose(() => service.dispose());
   return service;
-});
-
-/// Stream provider for detected beacons
-final detectedBeaconsProvider = StreamProvider<DetectedBeacon>((ref) {
-  final bleService = ref.watch(bleServiceProvider);
-  return bleService.detectedBeacons;
 });

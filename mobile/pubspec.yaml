@@ -13,8 +13,8 @@ dependencies:
   # Supabase
   supabase_flutter: ^2.3.0
 
-  # BLE (iBeacon via CoreLocation on iOS, BLE on Android)
-  flutter_beacon: 0.5.1
+  # BLE
+  flutter_blue_plus: ^1.31.0
 
   # State management
   flutter_riverpod: ^2.4.0
