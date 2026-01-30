@@ -106,11 +106,14 @@ class SupabaseService {
     // Ensure client profile exists before subscribing
     await ensureClientProfile();
 
-    await _client.from('subscriptions').upsert({
-      'client_id': user.id,
-      'campaign_id': campaignId,
-      'is_active': true,
-    });
+    await _client.from('subscriptions').upsert(
+      {
+        'client_id': user.id,
+        'campaign_id': campaignId,
+        'is_active': true,
+      },
+      onConflict: 'client_id,campaign_id',
+    );
   }
 
   Future<void> unsubscribeFromCampaign(String campaignId) async {
