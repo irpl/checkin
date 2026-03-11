@@ -67,6 +67,8 @@ class Campaign {
   final String? allowedEndTime;   // Format: "HH:MM:SS"
   // New time blocks system
   final List<CampaignTimeBlock> timeBlocks;
+  // Subscriber verification
+  final bool requiresSubscriberVerification;
   final bool isActive;
   final DateTime createdAt;
 
@@ -83,6 +85,7 @@ class Campaign {
     this.allowedStartTime,
     this.allowedEndTime,
     this.timeBlocks = const [],
+    this.requiresSubscriberVerification = false,
     this.isActive = true,
     required this.createdAt,
   });
@@ -108,6 +111,7 @@ class Campaign {
       allowedStartTime: json['allowed_start_time'],
       allowedEndTime: json['allowed_end_time'],
       timeBlocks: timeBlocks,
+      requiresSubscriberVerification: json['requires_subscriber_verification'] ?? false,
       isActive: json['is_active'] ?? true,
       createdAt: DateTime.parse(json['created_at']),
     );
@@ -126,6 +130,7 @@ class Campaign {
       'time_restriction_enabled': timeRestrictionEnabled,
       'allowed_start_time': allowedStartTime,
       'allowed_end_time': allowedEndTime,
+      'requires_subscriber_verification': requiresSubscriberVerification,
       'is_active': isActive,
     };
   }

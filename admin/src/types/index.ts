@@ -31,6 +31,8 @@ export interface Campaign {
   allowed_end_time: string | null    // TIME format: "HH:MM:SS"
   // New time blocks system
   time_blocks?: CampaignTimeBlock[]
+  // Subscriber verification
+  requires_subscriber_verification: boolean
   is_active: boolean
   created_at: string
   updated_at: string
@@ -93,4 +95,10 @@ export interface Subscription {
   campaign_id: string
   subscribed_at: string
   is_active: boolean
+  verified: boolean
+  verified_at: string | null
+  client?: {
+    name: string
+    email: string
+  }
 }

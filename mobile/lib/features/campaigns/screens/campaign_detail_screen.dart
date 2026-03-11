@@ -20,6 +20,7 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
   Campaign? _campaign;
   List<Beacon> _beacons = [];
   bool _isSubscribed = false;
+  bool _isVerified = false;
   bool _isLoading = true;
 
   @override
@@ -36,11 +37,15 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
       final campaign = await supabase.getCampaign(widget.campaignId);
       final beacons = await supabase.getBeaconsForCampaign(widget.campaignId);
       final isSubscribed = await supabase.isSubscribed(widget.campaignId);
+      final isVerified = isSubscribed
+          ? await supabase.isSubscriptionVerified(widget.campaignId)
+          : false;
 
       setState(() {
         _campaign = campaign;
         _beacons = beacons;
         _isSubscribed = isSubscribed;
+        _isVerified = isVerified;
         _isLoading = false;
       });
     } catch (e) {
@@ -200,6 +205,12 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
                                 'Proximity Delay',
                                 '${_campaign!.proximityDelaySeconds} seconds',
                               ),
+                            if (_campaign!.requiresSubscriberVerification)
+                              _buildDetailRow(
+                                context,
+                                'Verification',
+                                'Admin approval required',
+                              ),
                             if (_campaign!.timeBlocks.isNotEmpty) ...[
                               const SizedBox(height: 8),
                               const Divider(),
@@ -317,6 +328,75 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
                         ),
                       ),
                     ),
+                    // Verification status banner
+                    if (_isSubscribed &&
+                        _campaign!.requiresSubscriberVerification &&
+                        !_isVerified) ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        color: Theme.of(context).colorScheme.tertiaryContainer,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.hourglass_top,
+                                color: Theme.of(context).colorScheme.onTertiaryContainer,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Pending Verification',
+                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                            color: Theme.of(context).colorScheme.onTertiaryContainer,
+                                          ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'An admin must verify your subscription before you can check in.',
+                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                            color: Theme.of(context).colorScheme.onTertiaryContainer,
+                                          ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
+                    if (_isSubscribed &&
+                        _campaign!.requiresSubscriberVerification &&
+                        _isVerified) ...[
+                      const SizedBox(height: 16),
+                      Card(
+                        color: Theme.of(context).colorScheme.primaryContainer,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.verified,
+                                color: Theme.of(context).colorScheme.onPrimaryContainer,
+                              ),
+                              const SizedBox(width: 12),
+                              Text(
+                                'Subscription verified',
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+
                     const SizedBox(height: 24),
 
                     // Subscribe button

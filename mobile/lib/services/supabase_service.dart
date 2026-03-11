@@ -142,6 +142,24 @@ class SupabaseService {
     return response != null;
   }
 
+  /// Check if the current user's subscription to a campaign is verified.
+  /// Returns true if the campaign doesn't require verification, or if verified.
+  Future<bool> isSubscriptionVerified(String campaignId) async {
+    final user = currentUser;
+    if (user == null) return false;
+
+    final response = await _client
+        .from('subscriptions')
+        .select('verified')
+        .eq('client_id', user.id)
+        .eq('campaign_id', campaignId)
+        .eq('is_active', true)
+        .maybeSingle();
+
+    if (response == null) return false;
+    return response['verified'] == true;
+  }
+
   // Beacon methods
   Future<List<Beacon>> getBeaconsForCampaign(String campaignId) async {
     final response = await _client

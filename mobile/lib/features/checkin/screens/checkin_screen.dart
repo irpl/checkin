@@ -55,6 +55,17 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
         );
       }
 
+      // Validate subscriber verification
+      if (campaign.requiresSubscriberVerification) {
+        final isVerified = await supabase.isSubscriptionVerified(widget.campaignId);
+        if (!isVerified) {
+          throw Exception(
+            'Your subscription has not been verified yet. '
+            'An admin must verify your subscription before you can check in.',
+          );
+        }
+      }
+
       // Load form if exists
       final form = await supabase.getFormForCampaign(widget.campaignId);
 

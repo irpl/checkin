@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Campaign, Beacon, FormSchema, FormField, Checkin, CampaignTimeBlock } from '../types'
-import { ArrowLeft, Plus, Trash2, Bluetooth, FileText, ClipboardList, Calendar } from 'lucide-react'
+import { Campaign, Beacon, FormSchema, FormField, Checkin, CampaignTimeBlock, Subscription } from '../types'
+import { ArrowLeft, Plus, Trash2, Bluetooth, FileText, ClipboardList, Calendar, Users, ShieldCheck } from 'lucide-react'
 import { format } from 'date-fns'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -13,6 +13,7 @@ export default function CampaignDetailPage() {
   const [beacons, setBeacons] = useState<Beacon[]>([])
   const [form, setForm] = useState<FormSchema | null>(null)
   const [checkins, setCheckins] = useState<Checkin[]>([])
+  const [subscribers, setSubscribers] = useState<Subscription[]>([])
   const [loading, setLoading] = useState(true)
   const [showBeaconModal, setShowBeaconModal] = useState(false)
   const [showFormModal, setShowFormModal] = useState(false)
@@ -79,7 +80,7 @@ export default function CampaignDetailPage() {
 
   const loadCampaign = async () => {
     try {
-      const [campaignRes, beaconsRes, formRes, checkinsRes] = await Promise.all([
+      const [campaignRes, beaconsRes, formRes, checkinsRes, subscribersRes] = await Promise.all([
         supabase.from('campaigns').select('*, time_blocks:campaign_time_blocks(*)').eq('id', id).single(),
         supabase.from('beacons').select('*').eq('campaign_id', id),
         supabase.from('forms').select('*').eq('campaign_id', id).maybeSingle(),
@@ -88,12 +89,19 @@ export default function CampaignDetailPage() {
           .select('*, client:clients(name, email)')
           .eq('campaign_id', id)
           .order('created_at', { ascending: false }),
+        supabase
+          .from('subscriptions')
+          .select('*, client:clients(name, email)')
+          .eq('campaign_id', id)
+          .eq('is_active', true)
+          .order('subscribed_at', { ascending: false }),
       ])
 
       setCampaign(campaignRes.data)
       setBeacons(beaconsRes.data || [])
       setForm(formRes.data)
       setCheckins(checkinsRes.data || [])
+      setSubscribers(subscribersRes.data || [])
     } finally {
       setLoading(false)
     }
@@ -169,6 +177,17 @@ export default function CampaignDetailPage() {
           <div>
             <p className="text-sm text-gray-500">Proximity Delay</p>
             <p className="font-medium">{campaign.proximity_delay_seconds}s</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Verification</p>
+            <p className="font-medium">
+              {campaign.requires_subscriber_verification ? (
+                <span className="inline-flex items-center gap-1 text-amber-700">
+                  <ShieldCheck size={14} />
+                  Required
+                </span>
+              ) : 'Not required'}
+            </p>
           </div>
           <div>
             <p className="text-sm text-gray-500">Created</p>
@@ -317,6 +336,13 @@ export default function CampaignDetailPage() {
         </div>
       </div>
 
+      {/* Subscribers */}
+      <SubscribersSection
+        campaign={campaign}
+        subscribers={subscribers}
+        onUpdate={(updated) => setSubscribers(updated)}
+      />
+
       {/* Check-in Responses */}
       <div className="bg-white rounded-lg shadow mt-6">
         <div className="p-4 border-b flex justify-between items-center">
@@ -402,6 +428,118 @@ export default function CampaignDetailPage() {
             setShowFormModal(false)
           }}
         />
+      )}
+    </div>
+  )
+}
+
+function SubscribersSection({
+  campaign,
+  subscribers,
+  onUpdate,
+}: {
+  campaign: Campaign
+  subscribers: Subscription[]
+  onUpdate: (subscribers: Subscription[]) => void
+}) {
+  const [togglingId, setTogglingId] = useState<string | null>(null)
+
+  const toggleVerification = async (subscription: Subscription) => {
+    setTogglingId(subscription.id)
+    try {
+      const newVerified = !subscription.verified
+      const { error } = await supabase
+        .from('subscriptions')
+        .update({
+          verified: newVerified,
+          verified_at: newVerified ? new Date().toISOString() : null,
+        })
+        .eq('id', subscription.id)
+
+      if (error) throw error
+
+      onUpdate(
+        subscribers.map((s) =>
+          s.id === subscription.id
+            ? { ...s, verified: newVerified, verified_at: newVerified ? new Date().toISOString() : null }
+            : s
+        )
+      )
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to update verification')
+    } finally {
+      setTogglingId(null)
+    }
+  }
+
+  const verifiedCount = subscribers.filter((s) => s.verified).length
+
+  return (
+    <div className="bg-white rounded-lg shadow mt-6">
+      <div className="p-4 border-b flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Users size={20} className="text-purple-600" />
+          <h2 className="font-semibold">Subscribers ({subscribers.length})</h2>
+          {campaign.requires_subscriber_verification && (
+            <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded ml-2">
+              {verifiedCount}/{subscribers.length} verified
+            </span>
+          )}
+        </div>
+      </div>
+
+      {subscribers.length === 0 ? (
+        <div className="p-8 text-gray-500 text-center">
+          No subscribers yet.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-gray-50">
+                <th className="text-left p-3 font-medium">Name</th>
+                <th className="text-left p-3 font-medium">Email</th>
+                <th className="text-left p-3 font-medium">Subscribed</th>
+                {campaign.requires_subscriber_verification && (
+                  <th className="text-left p-3 font-medium">Verified</th>
+                )}
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {subscribers.map((sub) => (
+                <tr key={sub.id} className="hover:bg-gray-50">
+                  <td className="p-3">{sub.client?.name ?? '-'}</td>
+                  <td className="p-3 text-gray-500">{sub.client?.email ?? '-'}</td>
+                  <td className="p-3 text-gray-500">
+                    {format(new Date(sub.subscribed_at), 'MMM d, yyyy h:mm a')}
+                  </td>
+                  {campaign.requires_subscriber_verification && (
+                    <td className="p-3">
+                      <button
+                        onClick={() => toggleVerification(sub)}
+                        disabled={togglingId === sub.id}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                          sub.verified
+                            ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        } ${togglingId === sub.id ? 'opacity-50' : ''}`}
+                      >
+                        {sub.verified ? (
+                          <>
+                            <ShieldCheck size={14} />
+                            Verified
+                          </>
+                        ) : (
+                          'Verify'
+                        )}
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   )

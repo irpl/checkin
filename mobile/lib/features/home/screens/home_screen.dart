@@ -21,6 +21,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   List<Campaign> _subscribedCampaigns = [];
   List<Beacon> _beacons = [];
   final Map<String, DateTime> _detectedCampaigns = {};
+  final Set<String> _verifiedCampaignIds = {};
   bool _isLoading = true;
 
   @override
@@ -62,6 +63,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final supabase = ref.read(supabaseServiceProvider);
       final campaigns = await supabase.getSubscribedCampaigns();
       final beacons = await supabase.getBeaconsForSubscribedCampaigns();
+
+      // Pre-load verification status for campaigns that require it
+      _verifiedCampaignIds.clear();
+      for (final campaign in campaigns) {
+        if (campaign.requiresSubscriberVerification) {
+          final verified = await supabase.isSubscriptionVerified(campaign.id);
+          if (verified) {
+            _verifiedCampaignIds.add(campaign.id);
+          }
+        }
+      }
 
       setState(() {
         _subscribedCampaigns = campaigns;
@@ -124,6 +136,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Check if check-in is allowed at current time
     if (!campaign.isCheckinAllowedNow()) {
       return; // Outside allowed time window
+    }
+
+    // Check if subscriber verification is required and not verified
+    if (campaign.requiresSubscriberVerification &&
+        !_verifiedCampaignIds.contains(campaign.id)) {
+      return; // Not verified by admin
     }
 
     // Check if we already detected this campaign recently

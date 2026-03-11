@@ -23,6 +23,7 @@ const campaignSchema = z.object({
   time_restriction_enabled: z.boolean().default(false),
   allowed_start_time: z.string().optional(),
   allowed_end_time: z.string().optional(),
+  requires_subscriber_verification: z.boolean().default(false),
   is_active: z.boolean().default(true),
 })
 
@@ -56,6 +57,7 @@ export default function CreateCampaignPage() {
       required_duration_minutes: 0,
       required_presence_percentage: 100,
       proximity_delay_seconds: 0,
+      requires_subscriber_verification: false,
       time_restriction_enabled: false,
       allowed_start_time: '',
       allowed_end_time: '',
@@ -242,6 +244,23 @@ export default function CreateCampaignPage() {
           />
           <p className="text-sm text-gray-500 mt-1">
             How long should the user be near the beacon before prompting check-in?
+          </p>
+        </div>
+
+        <div className="border-t pt-6">
+          <div className="flex items-center gap-2 mb-4">
+            <input
+              type="checkbox"
+              {...register('requires_subscriber_verification')}
+              id="requires_subscriber_verification"
+              className="rounded border-gray-300"
+            />
+            <label htmlFor="requires_subscriber_verification" className="text-sm font-medium text-gray-700">
+              Require admin verification of subscribers
+            </label>
+          </div>
+          <p className="text-sm text-gray-500 ml-6 mb-4">
+            When enabled, subscribers must be manually verified by an admin before they can check in.
           </p>
         </div>
 
