@@ -244,7 +244,12 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
           onPressed: () => context.go('/'),
         ),
       ),
-      body: _buildBody(),
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 600),
+          child: _buildBody(),
+        ),
+      ),
     );
   }
 

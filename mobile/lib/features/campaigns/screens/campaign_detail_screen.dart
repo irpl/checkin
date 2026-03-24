@@ -102,322 +102,393 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
           onPressed: () => context.go('/campaigns'),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _campaign == null
-              ? const Center(child: Text('Campaign not found'))
-              : ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    // Header
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : _campaign == null
+                  ? const Center(child: Text('Campaign not found'))
+                  : ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        // Header
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CircleAvatar(
-                                  radius: 28,
-                                  backgroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .primaryContainer,
-                                  child: Icon(
-                                    Icons.location_on,
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 28,
+                                      backgroundColor: Theme.of(context)
+                                          .colorScheme
+                                          .primaryContainer,
+                                      child: Icon(
+                                        Icons.location_on,
+                                        color: Theme.of(context)
+                                            .colorScheme
+                                            .onPrimaryContainer,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 16),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _campaign!.name,
+                                            style: Theme.of(context)
+                                                .textTheme
+                                                .headlineSmall,
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Chip(
+                                            label: Text(
+                                              _campaign!.campaignType ==
+                                                      'instant'
+                                                  ? 'Instant Check-in'
+                                                  : 'Duration-based',
+                                            ),
+                                            padding: EdgeInsets.zero,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (_campaign!.description != null) ...[
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _campaign!.description!,
+                                    style:
+                                        Theme.of(context).textTheme.bodyLarge,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Details
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Details',
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 12),
+                                _buildDetailRow(
+                                  context,
+                                  'Type',
+                                  _campaign!.campaignType == 'instant'
+                                      ? 'Instant check-in'
+                                      : 'Duration-based check-in',
+                                ),
+                                if (_campaign!.campaignType == 'duration') ...[
+                                  _buildDetailRow(
+                                    context,
+                                    'Required Duration',
+                                    '${_campaign!.requiredDurationMinutes} minutes',
+                                  ),
+                                  _buildDetailRow(
+                                    context,
+                                    'Presence Required',
+                                    '${_campaign!.getEffectivePresencePercentage()}%',
+                                  ),
+                                ],
+                                if (_campaign!.proximityDelaySeconds > 0)
+                                  _buildDetailRow(
+                                    context,
+                                    'Proximity Delay',
+                                    '${_campaign!.proximityDelaySeconds} seconds',
+                                  ),
+                                if (_campaign!.requiresSubscriberVerification)
+                                  _buildDetailRow(
+                                    context,
+                                    'Verification',
+                                    'Admin approval required',
+                                  ),
+                                if (_campaign!.timeBlocks.isNotEmpty) ...[
+                                  const SizedBox(height: 8),
+                                  const Divider(),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Scheduled Times',
+                                    style:
+                                        Theme.of(context).textTheme.titleSmall,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ..._campaign!.timeBlocks.map((block) {
+                                    final isCurrentBlock =
+                                        _campaign!.getCurrentTimeBlock()?.id ==
+                                            block.id;
+                                    return Container(
+                                      margin: const EdgeInsets.only(bottom: 8),
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: isCurrentBlock
+                                            ? Theme.of(context)
+                                                .colorScheme
+                                                .primaryContainer
+                                                .withValues(alpha: 0.3)
+                                            : Theme.of(context)
+                                                .colorScheme
+                                                .surfaceContainerHighest
+                                                .withValues(alpha: 0.3),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: isCurrentBlock
+                                            ? Border.all(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                                width: 2,
+                                              )
+                                            : null,
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Column(
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                block.dayName,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodyMedium
+                                                    ?.copyWith(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                              ),
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                block.timeDisplay,
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .bodySmall,
+                                              ),
+                                            ],
+                                          ),
+                                          if (block.presencePercentage != null)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .secondaryContainer,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                '${block.presencePercentage}% required',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onSecondaryContainer,
+                                                    ),
+                                              ),
+                                            ),
+                                          if (isCurrentBlock)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .primary,
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: Text(
+                                                'Active Now',
+                                                style: Theme.of(context)
+                                                    .textTheme
+                                                    .labelSmall
+                                                    ?.copyWith(
+                                                      color: Theme.of(context)
+                                                          .colorScheme
+                                                          .onPrimary,
+                                                    ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    );
+                                  }),
+                                ],
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Beacons/Locations
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Locations (${_beacons.length})',
+                                  style:
+                                      Theme.of(context).textTheme.titleMedium,
+                                ),
+                                const SizedBox(height: 12),
+                                if (_beacons.isEmpty)
+                                  const Text('No locations configured')
+                                else
+                                  ..._beacons.map((beacon) => ListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        leading: const Icon(Icons.bluetooth),
+                                        title: Text(beacon.name),
+                                        subtitle: beacon.locationDescription !=
+                                                null
+                                            ? Text(beacon.locationDescription!)
+                                            : null,
+                                      )),
+                              ],
+                            ),
+                          ),
+                        ),
+                        // Verification status banner
+                        if (_isSubscribed &&
+                            _campaign!.requiresSubscriberVerification &&
+                            !_isVerified) ...[
+                          const SizedBox(height: 16),
+                          Card(
+                            color:
+                                Theme.of(context).colorScheme.tertiaryContainer,
+                            child: Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.hourglass_top,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onTertiaryContainer,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Pending Verification',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .titleSmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onTertiaryContainer,
+                                              ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'An admin must verify your subscription before you can check in.',
+                                          style: Theme.of(context)
+                                              .textTheme
+                                              .bodySmall
+                                              ?.copyWith(
+                                                color: Theme.of(context)
+                                                    .colorScheme
+                                                    .onTertiaryContainer,
+                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+
+                        if (_isSubscribed &&
+                            _campaign!.requiresSubscriberVerification &&
+                            _isVerified) ...[
+                          const SizedBox(height: 16),
+                          Card(
+                            color:
+                                Theme.of(context).colorScheme.primaryContainer,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.verified,
                                     color: Theme.of(context)
                                         .colorScheme
                                         .onPrimaryContainer,
                                   ),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _campaign!.name,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .headlineSmall,
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Chip(
-                                        label: Text(
-                                          _campaign!.campaignType == 'instant'
-                                              ? 'Instant Check-in'
-                                              : 'Duration-based',
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'Subscription verified',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onPrimaryContainer,
                                         ),
-                                        padding: EdgeInsets.zero,
-                                      ),
-                                    ],
                                   ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+
+                        const SizedBox(height: 24),
+
+                        // Subscribe button
+                        _isSubscribed
+                            ? OutlinedButton.icon(
+                                onPressed: _toggleSubscription,
+                                icon: const Icon(Icons.check),
+                                label: const Text('Subscribed'),
+                                style: OutlinedButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
                                 ),
-                              ],
-                            ),
-                            if (_campaign!.description != null) ...[
-                              const SizedBox(height: 16),
-                              Text(
-                                _campaign!.description!,
-                                style: Theme.of(context).textTheme.bodyLarge,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Details
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Details',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 12),
-                            _buildDetailRow(
-                              context,
-                              'Type',
-                              _campaign!.campaignType == 'instant'
-                                  ? 'Instant check-in'
-                                  : 'Duration-based check-in',
-                            ),
-                            if (_campaign!.campaignType == 'duration') ...[
-                              _buildDetailRow(
-                                context,
-                                'Required Duration',
-                                '${_campaign!.requiredDurationMinutes} minutes',
-                              ),
-                              _buildDetailRow(
-                                context,
-                                'Presence Required',
-                                '${_campaign!.getEffectivePresencePercentage()}%',
-                              ),
-                            ],
-                            if (_campaign!.proximityDelaySeconds > 0)
-                              _buildDetailRow(
-                                context,
-                                'Proximity Delay',
-                                '${_campaign!.proximityDelaySeconds} seconds',
-                              ),
-                            if (_campaign!.requiresSubscriberVerification)
-                              _buildDetailRow(
-                                context,
-                                'Verification',
-                                'Admin approval required',
-                              ),
-                            if (_campaign!.timeBlocks.isNotEmpty) ...[
-                              const SizedBox(height: 8),
-                              const Divider(),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Scheduled Times',
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
-                              const SizedBox(height: 8),
-                              ..._campaign!.timeBlocks.map((block) {
-                                final isCurrentBlock = _campaign!.getCurrentTimeBlock()?.id == block.id;
-                                return Container(
-                                  margin: const EdgeInsets.only(bottom: 8),
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: isCurrentBlock
-                                        ? Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3)
-                                        : Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
-                                    borderRadius: BorderRadius.circular(8),
-                                    border: isCurrentBlock
-                                        ? Border.all(
-                                            color: Theme.of(context).colorScheme.primary,
-                                            width: 2,
-                                          )
-                                        : null,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            block.dayName,
-                                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            block.timeDisplay,
-                                            style: Theme.of(context).textTheme.bodySmall,
-                                          ),
-                                        ],
-                                      ),
-                                      if (block.presencePercentage != null)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Theme.of(context).colorScheme.secondaryContainer,
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Text(
-                                            '${block.presencePercentage}% required',
-                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                                  color: Theme.of(context).colorScheme.onSecondaryContainer,
-                                                ),
-                                          ),
-                                        ),
-                                      if (isCurrentBlock)
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: Theme.of(context).colorScheme.primary,
-                                            borderRadius: BorderRadius.circular(12),
-                                          ),
-                                          child: Text(
-                                            'Active Now',
-                                            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                                  color: Theme.of(context).colorScheme.onPrimary,
-                                                ),
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                );
-                              }),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Beacons/Locations
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Locations (${_beacons.length})',
-                              style: Theme.of(context).textTheme.titleMedium,
-                            ),
-                            const SizedBox(height: 12),
-                            if (_beacons.isEmpty)
-                              const Text('No locations configured')
-                            else
-                              ..._beacons.map((beacon) => ListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    leading: const Icon(Icons.bluetooth),
-                                    title: Text(beacon.name),
-                                    subtitle: beacon.locationDescription != null
-                                        ? Text(beacon.locationDescription!)
-                                        : null,
-                                  )),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Verification status banner
-                    if (_isSubscribed &&
-                        _campaign!.requiresSubscriberVerification &&
-                        !_isVerified) ...[
-                      const SizedBox(height: 16),
-                      Card(
-                        color: Theme.of(context).colorScheme.tertiaryContainer,
-                        child: Padding(
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.hourglass_top,
-                                color: Theme.of(context).colorScheme.onTertiaryContainer,
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Pending Verification',
-                                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                                            color: Theme.of(context).colorScheme.onTertiaryContainer,
-                                          ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'An admin must verify your subscription before you can check in.',
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            color: Theme.of(context).colorScheme.onTertiaryContainer,
-                                          ),
-                                    ),
-                                  ],
+                              )
+                            : FilledButton(
+                                onPressed: _toggleSubscription,
+                                style: FilledButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(48),
                                 ),
+                                child: const Text('Subscribe to this Campaign'),
                               ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    if (_isSubscribed &&
-                        _campaign!.requiresSubscriberVerification &&
-                        _isVerified) ...[
-                      const SizedBox(height: 16),
-                      Card(
-                        color: Theme.of(context).colorScheme.primaryContainer,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.verified,
-                                color: Theme.of(context).colorScheme.onPrimaryContainer,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                'Subscription verified',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                    ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 24),
-
-                    // Subscribe button
-                    _isSubscribed
-                        ? OutlinedButton.icon(
-                            onPressed: _toggleSubscription,
-                            icon: const Icon(Icons.check),
-                            label: const Text('Subscribed'),
-                            style: OutlinedButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                            ),
-                          )
-                        : FilledButton(
-                            onPressed: _toggleSubscription,
-                            style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(48),
-                            ),
-                            child: const Text('Subscribe to this Campaign'),
-                          ),
-                  ],
-                ),
+                      ],
+                    ),
+        ),
+      ),
     );
   }
 

@@ -201,9 +201,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
               onRefresh: _loadData,
               child: ListView(
                 padding: const EdgeInsets.all(16),
@@ -302,6 +305,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               ),
             ),
+          ),
+        ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.go('/campaigns'),
         icon: const Icon(Icons.add),

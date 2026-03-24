@@ -93,12 +93,15 @@ class _CampaignsScreenState extends ConsumerState<CampaignsScreen> {
           onPressed: () => context.go('/'),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : RefreshIndicator(
-              onRefresh: _loadCampaigns,
-              child: _campaigns.isEmpty
-                  ? Center(
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 680),
+          child: _isLoading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _loadCampaigns,
+                  child: _campaigns.isEmpty
+                      ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
@@ -192,7 +195,9 @@ class _CampaignsScreenState extends ConsumerState<CampaignsScreen> {
                         );
                       },
                     ),
-            ),
+                ),
+          ),
+        ),
     );
   }
 }
