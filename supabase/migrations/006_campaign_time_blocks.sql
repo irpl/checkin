@@ -56,8 +56,11 @@ WHERE time_restriction_enabled = true
 -- Enable RLS
 ALTER TABLE campaign_time_blocks ENABLE ROW LEVEL SECURITY;
 
--- Admins can view time blocks for campaigns in their organization
-CREATE POLICY "Admins can view time blocks for their organization's campaigns"
+-- Note: Policy names are kept under 63 characters (PostgreSQL NAMEDATALEN limit).
+-- Longer names get silently truncated.
+
+-- Pre-008 admin policies (will be replaced by 008)
+CREATE POLICY "Admins can view org campaign time blocks"
     ON campaign_time_blocks
     FOR SELECT
     TO authenticated
@@ -70,8 +73,7 @@ CREATE POLICY "Admins can view time blocks for their organization's campaigns"
         )
     );
 
--- Admins can insert time blocks for campaigns in their organization
-CREATE POLICY "Admins can insert time blocks for their organization's campaigns"
+CREATE POLICY "Admins can insert org campaign time blocks"
     ON campaign_time_blocks
     FOR INSERT
     TO authenticated
@@ -84,8 +86,7 @@ CREATE POLICY "Admins can insert time blocks for their organization's campaigns"
         )
     );
 
--- Admins can update time blocks for campaigns in their organization
-CREATE POLICY "Admins can update time blocks for their organization's campaigns"
+CREATE POLICY "Admins can update org campaign time blocks"
     ON campaign_time_blocks
     FOR UPDATE
     TO authenticated
@@ -98,8 +99,7 @@ CREATE POLICY "Admins can update time blocks for their organization's campaigns"
         )
     );
 
--- Admins can delete time blocks for campaigns in their organization
-CREATE POLICY "Admins can delete time blocks for their organization's campaigns"
+CREATE POLICY "Admins can delete org campaign time blocks"
     ON campaign_time_blocks
     FOR DELETE
     TO authenticated
