@@ -8,6 +8,9 @@ class Checkin {
   final DateTime? presenceConfirmedAt;
   final Map<String, dynamic>? formResponse;
   final DateTime? checkedInAt;
+  final int? actualPresencePercentage;
+  final DateTime? sessionStartedAt;
+  final DateTime? sessionEndedAt;
   final DateTime createdAt;
 
   Checkin({
@@ -20,6 +23,9 @@ class Checkin {
     this.presenceConfirmedAt,
     this.formResponse,
     this.checkedInAt,
+    this.actualPresencePercentage,
+    this.sessionStartedAt,
+    this.sessionEndedAt,
     required this.createdAt,
   });
 
@@ -38,6 +44,13 @@ class Checkin {
       checkedInAt: json['checked_in_at'] != null
           ? DateTime.parse(json['checked_in_at'])
           : null,
+      actualPresencePercentage: json['actual_presence_percentage'],
+      sessionStartedAt: json['session_started_at'] != null
+          ? DateTime.parse(json['session_started_at'])
+          : null,
+      sessionEndedAt: json['session_ended_at'] != null
+          ? DateTime.parse(json['session_ended_at'])
+          : null,
       createdAt: DateTime.parse(json['created_at']),
     );
   }
@@ -53,6 +66,9 @@ class Checkin {
       'presence_confirmed_at': presenceConfirmedAt?.toIso8601String(),
       'form_response': formResponse,
       'checked_in_at': checkedInAt?.toIso8601String(),
+      'actual_presence_percentage': actualPresencePercentage,
+      'session_started_at': sessionStartedAt?.toIso8601String(),
+      'session_ended_at': sessionEndedAt?.toIso8601String(),
     };
   }
 

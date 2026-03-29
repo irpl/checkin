@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../services/supabase_service.dart';
+import '../../../services/presence_tracking_service.dart';
 import '../../../models/campaign.dart';
+import '../../../models/beacon.dart';
 import '../../../models/checkin.dart';
 import '../../../models/form_schema.dart';
 import '../widgets/dynamic_form.dart';
@@ -22,9 +26,13 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
   FormSchema? _form;
   Checkin? _checkin;
   Map<String, dynamic>? _savedResponse;
-  bool _isLoading = true;
   bool _isSubmitting = false;
   CheckinStep _currentStep = CheckinStep.loading;
+
+  // Presence tracking state
+  PresenceState? _presenceState;
+  StreamSubscription<PresenceState>? _presenceSubscription;
+  Beacon? _triggerBeacon;
 
   @override
   void initState() {
@@ -32,9 +40,14 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
     _initCheckin();
   }
 
+  @override
+  void dispose() {
+    _presenceSubscription?.cancel();
+    super.dispose();
+  }
+
   Future<void> _initCheckin() async {
     setState(() {
-      _isLoading = true;
       _currentStep = CheckinStep.loading;
     });
 
@@ -57,7 +70,8 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
 
       // Validate subscriber verification
       if (campaign.requiresSubscriberVerification) {
-        final isVerified = await supabase.isSubscriptionVerified(widget.campaignId);
+        final isVerified =
+            await supabase.isSubscriptionVerified(widget.campaignId);
         if (!isVerified) {
           throw Exception(
             'Your subscription has not been verified yet. '
@@ -75,6 +89,12 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
         savedResponse = await DynamicForm.loadSavedResponse(widget.campaignId);
       }
 
+      // Load beacons for this campaign (needed for presence tracking)
+      final beacons = await supabase.getBeaconsForCampaign(widget.campaignId);
+      if (beacons.isNotEmpty) {
+        _triggerBeacon = beacons.first;
+      }
+
       // Check for existing active check-in
       var checkin = await supabase.getActiveCheckin(widget.campaignId);
 
@@ -86,12 +106,16 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
         _form = form;
         _checkin = checkin;
         _savedResponse = savedResponse;
-        _isLoading = false;
         _currentStep = _determineStep(checkin!, campaign, form);
       });
+
+      // If resuming a duration tracking session, restart tracking
+      if (campaign.campaignType == 'duration' &&
+          _currentStep == CheckinStep.tracking) {
+        _startPresenceTracking();
+      }
     } catch (e) {
       setState(() {
-        _isLoading = false;
         _currentStep = CheckinStep.error;
       });
       if (mounted) {
@@ -109,17 +133,21 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
     }
 
     if (checkin.isConfirmed) {
-      // Already confirmed, go to form if exists
+      // Already confirmed
+      if (campaign.campaignType == 'duration' &&
+          checkin.sessionStartedAt != null) {
+        // Was in a tracking session — resume it
+        return CheckinStep.tracking;
+      }
       return form != null ? CheckinStep.form : CheckinStep.success;
     }
 
-    // For instant campaigns, go straight to confirmation/form
+    // For instant campaigns, go straight to confirmation
     if (campaign.campaignType == 'instant') {
       return CheckinStep.confirm;
     }
 
-    // For duration-based, would need to track presence over time
-    // For MVP, just go to confirmation
+    // For duration-based, show confirmation first, then tracking
     return CheckinStep.confirm;
   }
 
@@ -127,11 +155,9 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
     final now = DateTime.now();
     final currentDayOfWeek = now.weekday % 7;
 
-    // Find the next available time block
     CampaignTimeBlock? nextBlock;
     int daysUntilNext = 7;
 
-    // Look through the next 7 days
     for (int i = 0; i < 7; i++) {
       final checkDay = (currentDayOfWeek + i) % 7;
       final blocksForDay = campaign.timeBlocks
@@ -139,7 +165,6 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
           .toList();
 
       for (final block in blocksForDay) {
-        // If it's today, check if the time hasn't passed yet
         if (i == 0) {
           final blockStart = _parseTimeString(block.startTime);
           final currentTime = now.hour * 3600 + now.minute * 60 + now.second;
@@ -149,7 +174,6 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
             break;
           }
         } else {
-          // Future day
           nextBlock = block;
           daysUntilNext = i;
           break;
@@ -189,18 +213,103 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
       final supabase = ref.read(supabaseServiceProvider);
       final updated = await supabase.confirmCheckin(_checkin!.id);
 
-      setState(() {
-        _checkin = updated;
-        _isSubmitting = false;
-        _currentStep =
-            _form != null ? CheckinStep.form : CheckinStep.completing;
-      });
+      if (_campaign!.campaignType == 'duration') {
+        // Mark session start in DB
+        await supabase.startCheckinSession(_checkin!.id);
 
-      if (_form == null) {
-        _completeCheckin(null);
+        setState(() {
+          _checkin = updated;
+          _isSubmitting = false;
+          _currentStep = CheckinStep.tracking;
+        });
+
+        _startPresenceTracking();
+      } else {
+        // Instant campaign — same as before
+        setState(() {
+          _checkin = updated;
+          _isSubmitting = false;
+          _currentStep =
+              _form != null ? CheckinStep.form : CheckinStep.completing;
+        });
+
+        if (_form == null) {
+          _completeCheckin(null);
+        }
       }
     } catch (e) {
       setState(() => _isSubmitting = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  void _startPresenceTracking() {
+    if (_triggerBeacon == null) return;
+
+    final presenceService = ref.read(presenceTrackingServiceProvider);
+    presenceService.startTracking(
+      beaconId: _triggerBeacon!.id,
+      checkinId: _checkin!.id,
+      requiredPercentage: _campaign!.getEffectivePresencePercentage(),
+      requiredDurationMinutes: _campaign!.requiredDurationMinutes,
+    );
+
+    _presenceSubscription?.cancel();
+    _presenceSubscription = presenceService.stateStream.listen((state) {
+      if (mounted) {
+        setState(() => _presenceState = state);
+      }
+    });
+
+    // Set initial state
+    final initial = presenceService.currentState;
+    if (initial != null) {
+      setState(() => _presenceState = initial);
+    }
+  }
+
+  Future<void> _completeDurationCheckin() async {
+    if (_presenceState == null || !_presenceState!.meetsRequirement) return;
+
+    setState(() {
+      _isSubmitting = true;
+      _currentStep = CheckinStep.completing;
+    });
+
+    try {
+      final supabase = ref.read(supabaseServiceProvider);
+      final presenceService = ref.read(presenceTrackingServiceProvider);
+
+      if (_form != null) {
+        // Go to form step first, complete after form submission
+        await presenceService.stopTracking();
+        setState(() {
+          _isSubmitting = false;
+          _currentStep = CheckinStep.form;
+        });
+      } else {
+        // No form — complete directly via RPC
+        await supabase.completeDurationCheckin(
+          _checkin!.id,
+          _presenceState!.presencePercentage,
+          null,
+        );
+        await presenceService.stopTracking();
+
+        setState(() {
+          _isSubmitting = false;
+          _currentStep = CheckinStep.success;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isSubmitting = false;
+        _currentStep = CheckinStep.tracking;
+      });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
@@ -217,10 +326,21 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
 
     try {
       final supabase = ref.read(supabaseServiceProvider);
-      final updated = await supabase.completeCheckin(_checkin!.id, formData);
+
+      if (_campaign!.campaignType == 'duration' &&
+          _presenceState != null) {
+        // Duration campaign with form — use RPC
+        await supabase.completeDurationCheckin(
+          _checkin!.id,
+          _presenceState!.presencePercentage,
+          formData,
+        );
+      } else {
+        // Instant campaign
+        await supabase.completeCheckin(_checkin!.id, formData);
+      }
 
       setState(() {
-        _checkin = updated;
         _isSubmitting = false;
         _currentStep = CheckinStep.success;
       });
@@ -241,7 +361,15 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
         title: Text(_campaign?.name ?? 'Check In'),
         leading: IconButton(
           icon: const Icon(Icons.close),
-          onPressed: () => context.go('/'),
+          onPressed: () {
+            // If tracking, persist session so it can be resumed
+            if (_currentStep == CheckinStep.tracking) {
+              final presenceService =
+                  ref.read(presenceTrackingServiceProvider);
+              presenceService.stopTracking(persist: true);
+            }
+            context.go('/');
+          },
         ),
       ),
       body: Center(
@@ -269,6 +397,9 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
 
       case CheckinStep.confirm:
         return _buildConfirmStep();
+
+      case CheckinStep.tracking:
+        return _buildTrackingStep();
 
       case CheckinStep.form:
         return _buildFormStep();
@@ -389,7 +520,8 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
                       ),
                     ],
                   ),
-                  if (_campaign!.getCurrentTimeBlock()?.presencePercentage != null) ...[
+                  if (_campaign!.getCurrentTimeBlock()?.presencePercentage !=
+                      null) ...[
                     const SizedBox(height: 4),
                     Text(
                       '(Custom for this time slot)',
@@ -399,6 +531,15 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
                           ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  Text(
+                    'Your presence will be tracked via Bluetooth. '
+                    'Stay near the beacon for the required duration.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                    textAlign: TextAlign.center,
+                  ),
                 ],
               ),
             ),
@@ -412,8 +553,12 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
-                : const Icon(Icons.check),
-            label: const Text('Confirm Check-in'),
+                : Icon(_campaign?.campaignType == 'duration'
+                    ? Icons.play_arrow
+                    : Icons.check),
+            label: Text(_campaign?.campaignType == 'duration'
+                ? 'Start Session'
+                : 'Confirm Check-in'),
             style: FilledButton.styleFrom(
               minimumSize: const Size.fromHeight(56),
             ),
@@ -426,6 +571,197 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
         ],
       ),
     );
+  }
+
+  Widget _buildTrackingStep() {
+    final state = _presenceState;
+    final requiredMinutes = _campaign?.requiredDurationMinutes ?? 0;
+    final requiredPercentage =
+        _campaign?.getEffectivePresencePercentage() ?? 100;
+
+    final elapsedMinutes = state?.elapsed.inMinutes ?? 0;
+    final presencePercent = state?.presencePercentage ?? 0;
+    final isNearby = state?.isCurrentlyNearby ?? false;
+    final meetsRequirement = state?.meetsRequirement ?? false;
+
+    // Progress towards duration requirement (0.0 to 1.0)
+    final durationProgress = requiredMinutes > 0
+        ? (elapsedMinutes / requiredMinutes).clamp(0.0, 1.0)
+        : 1.0;
+
+    // Progress towards presence requirement (0.0 to 1.0)
+    final presenceProgress = requiredPercentage > 0
+        ? (presencePercent / requiredPercentage).clamp(0.0, 1.0)
+        : 1.0;
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Nearby indicator
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: isNearby
+                  ? Colors.green.shade100
+                  : Colors.orange.shade100,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isNearby ? Icons.bluetooth_connected : Icons.bluetooth_searching,
+                  size: 16,
+                  color: isNearby ? Colors.green.shade700 : Colors.orange.shade700,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  isNearby ? 'Beacon detected' : 'Searching for beacon...',
+                  style: TextStyle(
+                    color: isNearby ? Colors.green.shade700 : Colors.orange.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // Elapsed time
+          Text(
+            _formatDuration(state?.elapsed ?? Duration.zero),
+            style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  fontFeatures: [const FontFeature.tabularFigures()],
+                ),
+          ),
+          Text(
+            'of $requiredMinutes min required',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 8),
+
+          // Duration progress bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: durationProgress,
+              minHeight: 8,
+              backgroundColor:
+                  Theme.of(context).colorScheme.surfaceContainerHighest,
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // Presence percentage
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Presence',
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      '$presencePercent%',
+                      style:
+                          Theme.of(context).textTheme.headlineSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: presencePercent >= requiredPercentage
+                                    ? Colors.green.shade700
+                                    : Theme.of(context).colorScheme.primary,
+                              ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: presenceProgress,
+                    minHeight: 8,
+                    backgroundColor:
+                        Theme.of(context).colorScheme.surface,
+                    color: presencePercent >= requiredPercentage
+                        ? Colors.green
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$requiredPercentage% required',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color:
+                            Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // Time present
+          Text(
+            'Present for ${_formatDuration(state?.timePresent ?? Duration.zero)} '
+            'of ${_formatDuration(state?.elapsed ?? Duration.zero)}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+          ),
+          const SizedBox(height: 32),
+
+          // Complete button (only enabled when requirement is met)
+          FilledButton.icon(
+            onPressed:
+                meetsRequirement && !_isSubmitting ? _completeDurationCheckin : null,
+            icon: _isSubmitting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.check),
+            label: Text(meetsRequirement
+                ? 'Complete Check-in'
+                : 'Waiting for requirements...'),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size.fromHeight(56),
+            ),
+          ),
+          const SizedBox(height: 16),
+          TextButton(
+            onPressed: () {
+              final presenceService =
+                  ref.read(presenceTrackingServiceProvider);
+              presenceService.stopTracking(persist: true);
+              context.go('/');
+            },
+            child: const Text('Leave (session will continue)'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration d) {
+    final hours = d.inHours;
+    final minutes = d.inMinutes.remainder(60);
+    final seconds = d.inSeconds.remainder(60);
+    if (hours > 0) {
+      return '${hours}h ${minutes.toString().padLeft(2, '0')}m';
+    }
+    return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
   Widget _buildFormStep() {
@@ -468,6 +804,16 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
             style: Theme.of(context).textTheme.bodyLarge,
             textAlign: TextAlign.center,
           ),
+          if (_presenceState != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Presence: ${_presenceState!.presencePercentage}%',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Colors.green.shade700,
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+          ],
           const SizedBox(height: 48),
           FilledButton(
             onPressed: () => context.go('/'),
@@ -485,6 +831,7 @@ class _CheckinScreenState extends ConsumerState<CheckinScreen> {
 enum CheckinStep {
   loading,
   confirm,
+  tracking,
   form,
   completing,
   success,

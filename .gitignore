@@ -19,6 +19,9 @@ mobile/*.iml
 mobile/.metadata
 mobile/pubspec.lock
 
+# Supabase
+supabase/.temp/
+
 # IDE
 .idea/
 .vscode/

@@ -30,6 +30,9 @@ class BleService {
   bool _isScanning = false;
   List<Beacon> _targetBeacons = [];
 
+  /// Tracks the most recent detection time for each beacon (by beacon DB id)
+  final Map<String, DateTime> _lastSeenTimes = {};
+
   Stream<DetectedBeacon> get detectedBeacons =>
       _detectedBeaconsController.stream;
   bool get isScanning => _isScanning;
@@ -86,12 +89,15 @@ class BleService {
         debugPrint(
             'BLE: Detected iBeacon - UUID: $uuid, Major: $major, Minor: $minor, RSSI: ${result.rssi}');
 
+        final now = DateTime.now();
+        _lastSeenTimes[target.id] = now;
+
         _detectedBeaconsController.add(DetectedBeacon(
           uuid: uuid,
           major: major,
           minor: minor,
           rssi: result.rssi,
-          detectedAt: DateTime.now(),
+          detectedAt: now,
         ));
         break;
       }
@@ -103,6 +109,14 @@ class BleService {
     final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}'
         .toUpperCase();
+  }
+
+  /// Check if a specific beacon was seen within the given threshold.
+  /// Used by PresenceTrackingService to determine if user is still nearby.
+  bool isBeaconNearby(String beaconId, {Duration threshold = const Duration(seconds: 60)}) {
+    final lastSeen = _lastSeenTimes[beaconId];
+    if (lastSeen == null) return false;
+    return DateTime.now().difference(lastSeen) <= threshold;
   }
 
   /// Stop scanning

@@ -260,6 +260,30 @@ class SupabaseService {
     return Checkin.fromJson(response);
   }
 
+  /// Complete a duration-based check-in via server-side validation.
+  /// The RPC function validates that actual_presence_percentage meets the requirement.
+  Future<void> completeDurationCheckin(
+    String checkinId,
+    int actualPresencePercentage,
+    Map<String, dynamic>? formResponse,
+  ) async {
+    await _client.rpc('complete_duration_checkin', params: {
+      'p_checkin_id': checkinId,
+      'p_actual_presence_percentage': actualPresencePercentage,
+      'p_form_response': formResponse,
+    });
+  }
+
+  /// Mark session start time on a checkin record.
+  Future<void> startCheckinSession(String checkinId) async {
+    await _client
+        .from('checkins')
+        .update({
+          'session_started_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', checkinId);
+  }
+
   Future<Checkin?> getActiveCheckin(String campaignId) async {
     final user = currentUser;
     if (user == null) return null;
