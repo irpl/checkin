@@ -89,6 +89,20 @@ export interface Checkin {
   }
 }
 
+export interface CampaignInvitation {
+  id: string
+  campaign_id: string
+  token: string
+  created_by: string | null
+  redeemed_by: string | null
+  redeemed_at: string | null
+  created_at: string
+  client?: {
+    name: string
+    email: string
+  } | null
+}
+
 export interface Subscription {
   id: string
   client_id: string

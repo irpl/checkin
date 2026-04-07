@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { Campaign, Beacon, FormSchema, FormField, Checkin, CampaignTimeBlock, Subscription } from '../types'
-import { ArrowLeft, Plus, Trash2, Bluetooth, FileText, ClipboardList, Calendar, Users, ShieldCheck } from 'lucide-react'
+import { Campaign, Beacon, FormSchema, FormField, Checkin, CampaignTimeBlock, Subscription, CampaignInvitation } from '../types'
+import { ArrowLeft, Plus, Trash2, Bluetooth, FileText, ClipboardList, Calendar, Users, ShieldCheck, Link2, QrCode, Copy, Check as CheckIcon } from 'lucide-react'
 import { format } from 'date-fns'
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -14,6 +14,7 @@ export default function CampaignDetailPage() {
   const [form, setForm] = useState<FormSchema | null>(null)
   const [checkins, setCheckins] = useState<Checkin[]>([])
   const [subscribers, setSubscribers] = useState<Subscription[]>([])
+  const [invitations, setInvitations] = useState<CampaignInvitation[]>([])
   const [loading, setLoading] = useState(true)
   const [showBeaconModal, setShowBeaconModal] = useState(false)
   const [showFormModal, setShowFormModal] = useState(false)
@@ -80,7 +81,7 @@ export default function CampaignDetailPage() {
 
   const loadCampaign = async () => {
     try {
-      const [campaignRes, beaconsRes, formRes, checkinsRes, subscribersRes] = await Promise.all([
+      const [campaignRes, beaconsRes, formRes, checkinsRes, subscribersRes, invitationsRes] = await Promise.all([
         supabase.from('campaigns').select('*, time_blocks:campaign_time_blocks(*)').eq('id', id).single(),
         supabase.from('beacons').select('*').eq('campaign_id', id),
         supabase.from('forms').select('*').eq('campaign_id', id).maybeSingle(),
@@ -95,6 +96,11 @@ export default function CampaignDetailPage() {
           .eq('campaign_id', id)
           .eq('is_active', true)
           .order('subscribed_at', { ascending: false }),
+        supabase
+          .from('campaign_invitations')
+          .select('*, client:clients!campaign_invitations_redeemed_by_fkey(name, email)')
+          .eq('campaign_id', id)
+          .order('created_at', { ascending: false }),
       ])
 
       setCampaign(campaignRes.data)
@@ -102,6 +108,7 @@ export default function CampaignDetailPage() {
       setForm(formRes.data)
       setCheckins(checkinsRes.data || [])
       setSubscribers(subscribersRes.data || [])
+      setInvitations(invitationsRes.data || [])
     } finally {
       setLoading(false)
     }
@@ -343,6 +350,13 @@ export default function CampaignDetailPage() {
         onUpdate={(updated) => setSubscribers(updated)}
       />
 
+      {/* Invitations */}
+      <InvitationsSection
+        campaignId={campaign.id}
+        invitations={invitations}
+        onUpdate={setInvitations}
+      />
+
       {/* Check-in Responses */}
       <div className="bg-white rounded-lg shadow mt-6">
         <div className="p-4 border-b flex justify-between items-center">
@@ -429,6 +443,259 @@ export default function CampaignDetailPage() {
           }}
         />
       )}
+    </div>
+  )
+}
+
+function generateToken(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+  let result = ''
+  const array = new Uint8Array(24)
+  crypto.getRandomValues(array)
+  for (let i = 0; i < 24; i++) {
+    result += chars[array[i] % chars.length]
+  }
+  return result
+}
+
+function InvitationsSection({
+  campaignId,
+  invitations,
+  onUpdate,
+}: {
+  campaignId: string
+  invitations: CampaignInvitation[]
+  onUpdate: (invitations: CampaignInvitation[]) => void
+}) {
+  const [generating, setGenerating] = useState(false)
+  const [batchCount, setBatchCount] = useState(1)
+  const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [qrInvitation, setQrInvitation] = useState<CampaignInvitation | null>(null)
+
+  const getInviteUrl = (token: string) => {
+    return `${window.location.origin}/invite/${token}`
+  }
+
+  const generateInvitations = async () => {
+    setGenerating(true)
+    try {
+      const { data: adminData } = await supabase.rpc('get_admin_org_id')
+      const userId = (await supabase.auth.getUser()).data.user?.id
+
+      const newInvitations = Array.from({ length: batchCount }, () => ({
+        campaign_id: campaignId,
+        token: generateToken(),
+        created_by: userId,
+      }))
+
+      const { data, error } = await supabase
+        .from('campaign_invitations')
+        .insert(newInvitations)
+        .select('*, client:clients!campaign_invitations_redeemed_by_fkey(name, email)')
+
+      if (error) throw error
+      onUpdate([...(data || []), ...invitations])
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to generate invitations')
+    } finally {
+      setGenerating(false)
+    }
+  }
+
+  const deleteInvitation = async (invitationId: string) => {
+    if (!confirm('Delete this invitation?')) return
+    const { error } = await supabase.from('campaign_invitations').delete().eq('id', invitationId)
+    if (error) {
+      alert(error.message)
+      return
+    }
+    onUpdate(invitations.filter((i) => i.id !== invitationId))
+  }
+
+  const copyLink = async (invitation: CampaignInvitation) => {
+    await navigator.clipboard.writeText(getInviteUrl(invitation.token))
+    setCopiedId(invitation.id)
+    setTimeout(() => setCopiedId(null), 2000)
+  }
+
+  const availableCount = invitations.filter((i) => !i.redeemed_by).length
+  const redeemedCount = invitations.filter((i) => i.redeemed_by).length
+
+  return (
+    <div className="bg-white rounded-lg shadow mt-6">
+      <div className="p-4 border-b flex justify-between items-center">
+        <div className="flex items-center gap-2">
+          <Link2 size={20} className="text-indigo-600" />
+          <h2 className="font-semibold">Invitations ({invitations.length})</h2>
+          <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded ml-2">
+            {availableCount} available
+          </span>
+          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
+            {redeemedCount} redeemed
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            value={batchCount}
+            onChange={(e) => setBatchCount(Math.max(1, Math.min(50, parseInt(e.target.value) || 1)))}
+            className="w-16 px-2 py-1 border rounded-md text-sm text-center"
+            min={1}
+            max={50}
+          />
+          <button
+            onClick={generateInvitations}
+            disabled={generating}
+            className="flex items-center gap-1 text-sm bg-indigo-600 text-white px-3 py-1.5 rounded-md hover:bg-indigo-700 disabled:opacity-50"
+          >
+            <Plus size={16} />
+            {generating ? 'Generating...' : 'Generate'}
+          </button>
+        </div>
+      </div>
+
+      {invitations.length === 0 ? (
+        <div className="p-8 text-gray-500 text-center">
+          No invitations yet. Generate invitation links to share with users.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b bg-gray-50">
+                <th className="text-left p-3 font-medium">Token</th>
+                <th className="text-left p-3 font-medium">Status</th>
+                <th className="text-left p-3 font-medium">Redeemed By</th>
+                <th className="text-left p-3 font-medium">Created</th>
+                <th className="text-right p-3 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {invitations.map((inv) => (
+                <tr key={inv.id} className="hover:bg-gray-50">
+                  <td className="p-3 font-mono text-xs">
+                    {inv.token.slice(0, 12)}...
+                  </td>
+                  <td className="p-3">
+                    {inv.redeemed_by ? (
+                      <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">
+                        Redeemed
+                      </span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded bg-green-100 text-green-700">
+                        Available
+                      </span>
+                    )}
+                  </td>
+                  <td className="p-3 text-gray-500">
+                    {inv.redeemed_by
+                      ? `${inv.client?.name ?? '-'} (${inv.client?.email ?? '-'})`
+                      : '-'}
+                  </td>
+                  <td className="p-3 text-gray-500">
+                    {format(new Date(inv.created_at), 'MMM d, yyyy')}
+                  </td>
+                  <td className="p-3">
+                    <div className="flex items-center gap-1 justify-end">
+                      {!inv.redeemed_by && (
+                        <>
+                          <button
+                            onClick={() => copyLink(inv)}
+                            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                            title="Copy invite link"
+                          >
+                            {copiedId === inv.id ? <CheckIcon size={16} className="text-green-600" /> : <Copy size={16} />}
+                          </button>
+                          <button
+                            onClick={() => setQrInvitation(inv)}
+                            className="p-1.5 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded"
+                            title="Show QR code"
+                          >
+                            <QrCode size={16} />
+                          </button>
+                          <button
+                            onClick={() => deleteInvitation(inv.id)}
+                            className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded"
+                            title="Delete invitation"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* QR Code Modal */}
+      {qrInvitation && (
+        <QrCodeModal
+          url={getInviteUrl(qrInvitation.token)}
+          onClose={() => setQrInvitation(null)}
+        />
+      )}
+    </div>
+  )
+}
+
+function QrCodeModal({ url, onClose }: { url: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  const canvasRef = useState<HTMLCanvasElement | null>(null)
+
+  const copyUrl = async () => {
+    await navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-lg shadow-lg w-full max-w-sm">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h3 className="font-semibold">Invitation QR Code</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
+            &times;
+          </button>
+        </div>
+        <div className="p-6 flex flex-col items-center gap-4">
+          <div className="bg-white p-4 rounded-lg border">
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(url)}`}
+              alt="QR Code"
+              width={200}
+              height={200}
+            />
+          </div>
+          <div className="w-full">
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={url}
+                readOnly
+                className="flex-1 px-3 py-2 border rounded-md text-sm font-mono bg-gray-50"
+              />
+              <button
+                onClick={copyUrl}
+                className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm"
+              >
+                {copied ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="p-4 border-t flex justify-end">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border rounded-md hover:bg-gray-50"
+          >
+            Close
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

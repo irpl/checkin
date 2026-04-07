@@ -61,17 +61,59 @@ class SupabaseService {
     }
   }
 
-  // Campaign methods
-  Future<List<Campaign>> getActiveCampaigns() async {
-    final response = await _client
-        .from('campaigns')
-        .select('*, time_blocks:campaign_time_blocks(*)')
-        .eq('is_active', true)
-        .order('created_at', ascending: false);
+  // Invitation methods
+  /// Redeem an invitation token: subscribes the user to the campaign and marks
+  /// the invitation as consumed. Returns the campaign on success.
+  Future<Campaign> redeemInvitation(String token) async {
+    final user = currentUser;
+    if (user == null) throw Exception('Not authenticated');
 
-    return (response as List).map((json) => Campaign.fromJson(json)).toList();
+    // Look up the invitation
+    final invitation = await _client
+        .from('campaign_invitations')
+        .select('*')
+        .eq('token', token)
+        .maybeSingle();
+
+    if (invitation == null) {
+      throw Exception('Invalid invitation link');
+    }
+
+    if (invitation['redeemed_by'] != null) {
+      throw Exception('This invitation has already been used');
+    }
+
+    final campaignId = invitation['campaign_id'] as String;
+
+    // Ensure client profile exists
+    await ensureClientProfile();
+
+    // Subscribe to the campaign
+    await _client.from('subscriptions').upsert(
+      {
+        'client_id': user.id,
+        'campaign_id': campaignId,
+        'is_active': true,
+      },
+      onConflict: 'client_id,campaign_id',
+    );
+
+    // Mark invitation as redeemed
+    await _client
+        .from('campaign_invitations')
+        .update({
+          'redeemed_by': user.id,
+          'redeemed_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', invitation['id']);
+
+    // Fetch and return the campaign
+    final campaign = await getCampaign(campaignId);
+    if (campaign == null) throw Exception('Campaign not found');
+    return campaign;
   }
 
+  // Campaign methods
   Future<List<Campaign>> getSubscribedCampaigns() async {
     final user = currentUser;
     if (user == null) return [];
