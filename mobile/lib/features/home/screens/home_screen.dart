@@ -276,13 +276,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                             const SizedBox(height: 8),
                             const Text(
-                              'Browse campaigns to subscribe',
+                              'You need an invitation link to join a campaign',
                               textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            OutlinedButton(
-                              onPressed: () => context.go('/campaigns'),
-                              child: const Text('Browse Campaigns'),
                             ),
                           ],
                         ),
@@ -307,11 +302,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ),
           ),
         ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.go('/campaigns'),
-        icon: const Icon(Icons.add),
-        label: const Text('Find Campaigns'),
-      ),
     );
   }
 }

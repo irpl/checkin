@@ -58,40 +58,6 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
     }
   }
 
-  Future<void> _toggleSubscription() async {
-    final supabase = ref.read(supabaseServiceProvider);
-
-    try {
-      if (_isSubscribed) {
-        await supabase.unsubscribeFromCampaign(widget.campaignId);
-      } else {
-        await supabase.subscribeToCampaign(widget.campaignId);
-      }
-
-      setState(() {
-        _isSubscribed = !_isSubscribed;
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              _isSubscribed
-                  ? 'Subscribed to ${_campaign?.name}'
-                  : 'Unsubscribed from ${_campaign?.name}',
-            ),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
-        );
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -466,25 +432,6 @@ class _CampaignDetailScreenState extends ConsumerState<CampaignDetailScreen> {
                           ),
                         ],
 
-                        const SizedBox(height: 24),
-
-                        // Subscribe button
-                        _isSubscribed
-                            ? OutlinedButton.icon(
-                                onPressed: _toggleSubscription,
-                                icon: const Icon(Icons.check),
-                                label: const Text('Subscribed'),
-                                style: OutlinedButton.styleFrom(
-                                  minimumSize: const Size.fromHeight(48),
-                                ),
-                              )
-                            : FilledButton(
-                                onPressed: _toggleSubscription,
-                                style: FilledButton.styleFrom(
-                                  minimumSize: const Size.fromHeight(48),
-                                ),
-                                child: const Text('Subscribe to this Campaign'),
-                              ),
                       ],
                     ),
         ),
